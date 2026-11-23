@@ -18,6 +18,20 @@ test('busca por nome, empresa, CNPJ (com ou sem pontos), telefone e e-mail — s
   assert.deepEqual(buscarClientes(CLIENTES, 'consensus.com').map((c) => c.id), ['3'])
 })
 
+test('busca por nome abreviado: várias palavras em qualquer ordem, começo de palavra, razão social e iniciais', () => {
+  const lista = [
+    { id: 'a', name: 'Fabio Alexandre Fagundes Domingos - ME', company: 'Auto Center Tubarão' },
+    { id: 'b', name: 'Maria Souza', company: 'Padaria da Maria', briefingData: { razaoSocial: 'MARIA SOUZA PANIFICADORA LTDA', nomeFantasia: 'Pão Quente' } },
+  ]
+  assert.deepEqual(buscarClientes(lista, 'auto tubarao').map((c) => c.id), ['a'])
+  assert.deepEqual(buscarClientes(lista, 'tubarao auto').map((c) => c.id), ['a'])
+  assert.deepEqual(buscarClientes(lista, 'alex fag').map((c) => c.id), ['a'])
+  assert.deepEqual(buscarClientes(lista, 'panificadora').map((c) => c.id), ['b']) // razão social
+  assert.deepEqual(buscarClientes(lista, 'pao quente').map((c) => c.id), ['b']) // nome fantasia
+  assert.deepEqual(buscarClientes(lista, 'fafd').map((c) => c.id), ['a']) // iniciais: Fabio Alexandre Fagundes Domingos
+  assert.deepEqual(buscarClientes(lista, 'xyz zzz'), [])
+})
+
 test('busca: menos de 2 letras não lista ninguém, 1-2 dígitos não casam telefone; quem começa com o termo vem primeiro', () => {
   assert.deepEqual(buscarClientes(CLIENTES, 'f'), [])
   assert.deepEqual(buscarClientes(CLIENTES, ''), [])

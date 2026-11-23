@@ -12,27 +12,38 @@ export interface ClienteBuscavel {
   name: string
   company?: string
   email?: string
+  supportEmail?: string
   phone?: string
   cnpj?: string
+  tenantName?: string
   fichaCadastro?: { cnpj?: string }
+  briefingData?: { razaoSocial?: string; nomeFantasia?: string; cnpj?: string }
 }
 
+const palavrasDe = (texto: string) => texto.split(/[^a-z0-9]+/).filter(Boolean)
+
 /**
- * Busca por nome, empresa, e-mail, CNPJ ou telefone (com ou sem pontuação). Quem COMEÇA com o que foi digitado vem primeiro.
- * Menos de 2 caracteres não busca nada (evita despejar a lista inteira).
+ * Busca da empresa (nome, razão social, nome fantasia, e-mail, CNPJ ou telefone, com ou sem pontuação; nome abreviado também):
+ *  - várias palavras valem juntas, em qualquer ordem ("auto tubarao" acha "Auto Center Tubarão");
+ *  - cada palavra casa o começo de uma palavra do nome ("alex fag" acha "Fabio Alexandre Fagundes") ou um pedaço dele;
+ *  - as iniciais também ("afd" acha "Auto Fabio Domingos", com 3+ letras).
+ * Quem COMEÇA com o que foi digitado vem primeiro. Menos de 2 caracteres não busca nada (evita despejar a lista inteira).
  */
 export function buscarClientes<T extends ClienteBuscavel>(clientes: T[], termo: string, limite = 8): T[] {
-  const t = semAcento(termo).trim()
+  const t = semAcento(termo).trim().replace(/\s+/g, ' ')
   const d = soDigitos(termo)
   if (t.length < 2) return []
+  const tokens = t.split(' ')
   const achados: { c: T; nota: number }[] = []
   for (const c of clientes) {
-    const textos = [c.name, c.company, c.email].map((x) => semAcento(x ?? '')).filter(Boolean)
-    const numeros = [c.phone, c.cnpj, c.fichaCadastro?.cnpj].map((x) => soDigitos(x ?? '')).filter(Boolean)
+    const textos = [c.name, c.company, c.briefingData?.razaoSocial, c.briefingData?.nomeFantasia, c.tenantName, c.email, c.supportEmail]
+      .map((x) => semAcento(x ?? '')).filter(Boolean)
+    const numeros = [c.phone, c.cnpj, c.fichaCadastro?.cnpj, c.briefingData?.cnpj].map((x) => soDigitos(x ?? '')).filter(Boolean)
     let nota = -1
     if (textos.some((x) => x.startsWith(t))) nota = 3
-    else if (textos.some((x) => x.split(/\s+/).some((p) => p.startsWith(t)))) nota = 2
-    else if (textos.some((x) => x.includes(t))) nota = 1
+    else if (textos.some((x) => { const w = palavrasDe(x); return tokens.every((k) => w.some((p) => p.startsWith(k))) })) nota = 2
+    else if (textos.some((x) => tokens.every((k) => x.includes(k)))) nota = 1
+    else if (tokens.length === 1 && /^[a-z]{3,8}$/.test(t) && textos.some((x) => palavrasDe(x).map((p) => p[0]).join('').startsWith(t))) nota = 0
     // Número só conta se foram digitados dígitos suficientes (3+), senão "1" casaria com todo mundo.
     if (d.length >= 3 && numeros.some((n) => n.includes(d))) nota = Math.max(nota, numeros.some((n) => n.startsWith(d)) ? 3 : 2)
     if (nota >= 0) achados.push({ c, nota })

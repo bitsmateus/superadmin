@@ -102,13 +102,15 @@ export function NovaDemandaModal({ board: quadroFixo, onClose, onCriada, cliente
     const c = listaDeClientes.find((x) => x.id === id)
     if (!c) return
     setNome(c.name ?? '')
-    setEmpresa(c.company ?? '')
+    // A empresa da demanda é a do cliente (se ele não tem "empresa" cadastrada, vale o nome).
+    setEmpresa(c.company?.trim() || c.name || '')
     if (c.phone?.trim()) { setTelefone(c.phone); setPeloGrupo(false) }
   }
 
   const falta = !quadroFixo && !crmId ? 'Escolha o responsável.'
     : !board ? 'O CRM escolhido não tem quadro pra receber a demanda.'
-    : modoCliente === 'cliente' && !clienteEscolhido ? 'Escolha o cliente pela busca, ou marque "Outro" e descreva.'
+    : modoCliente === 'cliente' && !clienteEscolhido ? 'Escolha a empresa pela busca, ou marque "Outro" e descreva.'
+    : modoCliente === 'outro' && !empresa.trim() ? 'Preencha a empresa.'
     : modoCliente === 'outro' && motivoOutro ? motivoOutro
     : !nome.trim() ? 'Escreva o nome.'
     : !peloGrupo && !telefoneDaDemandaOk(telefone) ? 'Telefone: o número com DDD, ou marque "Grupo" se a demanda veio pelo grupo.'
@@ -123,7 +125,7 @@ export function NovaDemandaModal({ board: quadroFixo, onClose, onCriada, cliente
     setCriando(true)
     const dados = {
       nome: nome.trim(),
-      empresa: empresa.trim(),
+      empresa: modoCliente === 'cliente' && clienteEscolhido ? (clienteEscolhido.company?.trim() || clienteEscolhido.name) : empresa.trim(),
       telefone: peloGrupo || /^grupo$/i.test(telefone.trim()) ? 'grupo' : telefone.trim(),
       tipo,
       categoria,
@@ -198,13 +200,13 @@ export function NovaDemandaModal({ board: quadroFixo, onClose, onCriada, cliente
           </div>
         )}
         <div>
-          <p className="mb-1.5 text-xs font-medium text-foreground/70">Cliente *</p>
+          <p className="mb-1.5 text-xs font-medium text-foreground/70">Empresa *</p>
           <div className="mb-2 inline-flex overflow-hidden rounded-lg border border-line text-xs font-medium">
             {([['cliente', 'Cliente'], ['outro', 'Outro']] as const).map(([v, r]) => (
               <button
                 key={v}
                 type="button"
-                onClick={() => setModoCliente(v)}
+                onClick={() => { if (v !== modoCliente) { setModoCliente(v); if (v === 'outro') setEmpresa('') } }}
                 className={v === modoCliente ? 'bg-accent/10 px-3 py-1.5 text-accent' : 'px-3 py-1.5 text-foreground/55 hover:bg-elevate/[0.04]'}
               >
                 {r}
@@ -213,14 +215,28 @@ export function NovaDemandaModal({ board: quadroFixo, onClose, onCriada, cliente
           </div>
           {modoCliente === 'cliente' ? (
             clienteEscolhido ? (
-              <div className="flex items-center justify-between gap-2 rounded-lg border border-accent/30 bg-accent/[0.06] px-3 py-2 text-sm">
-                <span className="min-w-0 truncate font-medium text-foreground">
-                  {clienteEscolhido.name}
-                  {clienteEscolhido.company?.trim() && clienteEscolhido.company.trim() !== clienteEscolhido.name && (
-                    <span className="font-normal text-foreground/55"> — {clienteEscolhido.company}</span>
-                  )}
-                </span>
-                <button type="button" onClick={() => setClienteId('')} className="shrink-0 text-xs text-foreground/50 hover:text-danger">Trocar</button>
+              <div className="rounded-lg border border-accent/30 bg-accent/[0.06] px-3 py-2 text-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="min-w-0 truncate font-medium text-foreground">
+                    {clienteEscolhido.company?.trim() || clienteEscolhido.name}
+                    {clienteEscolhido.company?.trim() && clienteEscolhido.company.trim() !== clienteEscolhido.name && (
+                      <span className="font-normal text-foreground/55"> — {clienteEscolhido.name}</span>
+                    )}
+                  </span>
+                  <button type="button" onClick={() => setClienteId('')} className="shrink-0 text-xs text-foreground/50 hover:text-danger">Trocar</button>
+                </div>
+                <dl className="mt-1.5 space-y-0.5 text-xs">
+                  <div className="flex gap-1.5">
+                    <dt className="shrink-0 text-foreground/45">E-mail de suporte (acesso):</dt>
+                    <dd className={cn('min-w-0 break-all font-medium', clienteEscolhido.supportEmail?.trim() ? 'text-foreground/85' : 'text-warning')}>
+                      {clienteEscolhido.supportEmail?.trim() || 'não cadastrado'}
+                    </dd>
+                  </div>
+                  <div className="flex gap-1.5">
+                    <dt className="shrink-0 text-foreground/45">E-mail do cliente:</dt>
+                    <dd className="min-w-0 break-all text-foreground/75">{clienteEscolhido.email?.trim() || 'não cadastrado'}</dd>
+                  </div>
+                </dl>
               </div>
             ) : (
               <div>
@@ -228,7 +244,7 @@ export function NovaDemandaModal({ board: quadroFixo, onClose, onCriada, cliente
                   aria-label="Buscar cliente"
                   value={busca}
                   onChange={(e) => setBusca(e.target.value)}
-                  placeholder="Buscar por nome, empresa, CNPJ ou telefone…"
+                  placeholder="Buscar a empresa por nome, nome abreviado, CNPJ ou telefone…"
                   autoComplete="off"
                 />
                 {busca.trim().length >= 2 && (
@@ -243,7 +259,7 @@ export function NovaDemandaModal({ board: quadroFixo, onClose, onCriada, cliente
                           >
                             <span className="block truncate font-medium text-foreground">{c.name}</span>
                             <span className="block truncate text-xs text-foreground/50">
-                              {[c.company?.trim() && c.company.trim() !== c.name ? c.company : '', c.phone, c.cnpj || c.fichaCadastro?.cnpj].filter(Boolean).join(' · ')}
+                              {[c.company?.trim() && c.company.trim() !== c.name ? c.company : '', c.phone, c.cnpj || c.fichaCadastro?.cnpj, c.supportEmail].filter(Boolean).join(' · ')}
                             </span>
                           </button>
                         </li>
@@ -271,7 +287,7 @@ export function NovaDemandaModal({ board: quadroFixo, onClose, onCriada, cliente
           )}
         </div>
         <Input label="Nome *" value={nome} onChange={(e) => setNome(e.target.value)} autoFocus={!!quadroFixo} />
-        <Input label="Empresa" value={empresa} onChange={(e) => setEmpresa(e.target.value)} />
+        {modoCliente === 'outro' && <Input label="Empresa *" value={empresa} onChange={(e) => setEmpresa(e.target.value)} />}
         <div>
           <p className="mb-1.5 text-xs font-medium text-foreground/70">Telefone *</p>
           <div className="mb-2 inline-flex overflow-hidden rounded-lg border border-line text-xs font-medium">

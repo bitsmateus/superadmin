@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { sendSupportGroupMessage } from '../lib/supportGroup.js';
 import { generateWelcomeMessage } from '../lib/flowAi.js';
 import { resolveWabaAccesses } from '../lib/wabaAccess.js';
+import { comNotaDoBriefing } from '../lib/notaDoBriefing.js';
 import {
   createTemplate,
   bodyVariables,
@@ -139,9 +140,9 @@ export async function publicRoutes(app: FastifyInstance) {
       const { token } = req.params;
       const { data } = req.body;
       const existing = await queryOne(
-        'SELECT id, logs FROM clients WHERE briefing_token = $1',
+        'SELECT id, logs, notes FROM clients WHERE briefing_token = $1',
         [token]
-      ) as { id: string; logs: unknown[] } | null;
+      ) as { id: string; logs: unknown[]; notes: unknown[] | null } | null;
       if (!existing) return reply.status(404).send({ message: 'Token inválido' });
 
       const newLog = { id: uuidv4(), action: 'Briefing preenchido pelo cliente', createdAt: new Date().toISOString() };
@@ -154,10 +155,12 @@ export async function publicRoutes(app: FastifyInstance) {
              briefing_status = 'filled',
              stage = CASE WHEN stage = 'briefing' THEN 'setup_start'::pipeline_stage ELSE stage END,
              stage_updated_at = CASE WHEN stage = 'briefing' THEN NOW() ELSE stage_updated_at END,
-             logs = $2
+             logs = $2,
+             notes = $4::jsonb
          WHERE briefing_token = $3
          RETURNING company, name`,
-        [JSON.stringify(data), JSON.stringify(logs), token]
+        // As respostas também ficam numa nota interna do cliente (sem senhas), pro suporte ler na aba "Notas internas".
+        [JSON.stringify(data), JSON.stringify(logs), token, JSON.stringify(comNotaDoBriefing(existing.notes, data))]
       );
 
       // Notifica o grupo do WhatsApp (não bloqueia a resposta).
@@ -219,9 +222,9 @@ export async function publicRoutes(app: FastifyInstance) {
       const { token } = req.params;
       const patch = req.body?.patch ?? {};
       const existing = await queryOne(
-        'SELECT id, logs, briefing_data FROM clients WHERE briefing_token = $1',
+        'SELECT id, logs, notes, briefing_data FROM clients WHERE briefing_token = $1',
         [token]
-      ) as { id: string; logs: unknown[]; briefing_data: Record<string, unknown> | null } | null;
+      ) as { id: string; logs: unknown[]; notes: unknown[] | null; briefing_data: Record<string, unknown> | null } | null;
       if (!existing) return reply.status(404).send({ message: 'Token inválido' });
 
       const clean: Record<string, unknown> = {};
@@ -255,10 +258,10 @@ export async function publicRoutes(app: FastifyInstance) {
       const logs = [...((existing.logs as unknown[]) ?? []), newLog];
 
       const [updated] = await query<{ company: string | null; name: string }>(
-        `UPDATE clients SET briefing_data = $1, logs = $2
+        `UPDATE clients SET briefing_data = $1, logs = $2, notes = $4::jsonb
          WHERE briefing_token = $3
          RETURNING company, name`,
-        [JSON.stringify(merged), JSON.stringify(logs), token]
+        [JSON.stringify(merged), JSON.stringify(logs), token, JSON.stringify(comNotaDoBriefing(existing.notes, merged))]
       );
 
       if (updated) {

@@ -40,6 +40,36 @@ export function opcoesDeMes(extra: string[] = []): { value: string; label: strin
 }
 
 export const MAX_BYTES = 5 * 1024 * 1024
+
+function salvarComo(href: string, nome: string) {
+  const a = document.createElement('a')
+  a.href = href
+  a.download = nome
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+}
+
+/** Baixa uma arte (imagem ou vídeo) pro computador. O nome do arquivo é o do próprio anexo. */
+export async function baixarAnexo(a: GcSocialAnexo): Promise<void> {
+  if (a.videoId) {
+    const url = URL.createObjectURL(await gestaoClientes.baixarVideo(a.videoId))
+    salvarComo(url, a.name || 'video.mp4')
+    window.setTimeout(() => URL.revokeObjectURL(url), 10_000)
+    return
+  }
+  salvarComo(a.dataUrl, a.name || 'arte')
+}
+
+/** Baixa toda a arte final de um card (uma por vez, com um respiro pro navegador não bloquear). */
+export async function baixarArtesDoCard(p: Pick<GcSocialProducao, 'anexos'>): Promise<number> {
+  const lista = midiasFinais(p)
+  for (let i = 0; i < lista.length; i++) {
+    if (i > 0) await new Promise((r) => setTimeout(r, 250))
+    await baixarAnexo(lista[i])
+  }
+  return lista.length
+}
 export const MAX_VIDEO_BYTES = 100 * 1024 * 1024
 
 /** A miniatura do card: a primeira imagem da arte final ou, num Reels, a capa do vídeo. */

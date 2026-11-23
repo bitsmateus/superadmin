@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { DndContext, DragOverlay, useDraggable, useDroppable, type DragEndEvent } from '@dnd-kit/core'
 import {
   AlertTriangle, CalendarClock, ChevronLeft, ChevronRight, Copy, ExternalLink, FileDown, FileText, FolderOpen, ImagePlus, Link2, Loader2,
-  MessageCircle, Paperclip, Pencil, Plus, Send, ShieldCheck, Sparkles, Trash2, UserRound, X,
+  Download, MessageCircle, Maximize2, Paperclip, Pencil, Plus, Send, ShieldCheck, Sparkles, Trash2, UserRound, X,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/Button'
@@ -14,7 +14,7 @@ import { useTeamProfiles } from '@/hooks/useTeamProfiles'
 import { useKanbanSensors } from '@/hooks/useKanbanSensors'
 import { gestaoClientes, type GcSocialMaterial, type GcSocialProducao, type GcSocialStatus } from '@/services/gestaoClientes'
 import {
-  ETAPAS_ARTE, MAX_BYTES, anexarMidia, capaDoCard, copiar, enderecoDoPortal, imagensFinais, lerArquivo, mesDeHoje, nomeDoMes, opcoesDeMes, somarMes,
+  ETAPAS_ARTE, MAX_BYTES, anexarMidia, baixarArtesDoCard, capaDoCard, copiar, enderecoDoPortal, imagensFinais, lerArquivo, mesDeHoje, nomeDoMes, opcoesDeMes, somarMes,
 } from '@/lib/socialArtes'
 import { cn } from '@/lib/utils'
 import { DetalheDaArte } from './social/DetalheDaArte'
@@ -118,6 +118,46 @@ function resumoDaArte(descricao: string): string {
   return linha.replace(/^[^\p{L}\p{N}]+/u, '')
 }
 
+/** Visualização grande das imagens da arte final, sem abrir o card. Setas (ou teclado) passam de uma pra outra. */
+function AmpliarArte({ p, onFechar, onBaixar }: { p: GcSocialProducao; onFechar: () => void; onBaixar: () => void }) {
+  const imagens = imagensFinais(p)
+  const [i, setI] = React.useState(0)
+  const n = imagens.length
+  React.useEffect(() => {
+    const tecla = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onFechar()
+      if (e.key === 'ArrowRight') setI((x) => (x + 1) % n)
+      if (e.key === 'ArrowLeft') setI((x) => (x - 1 + n) % n)
+    }
+    window.addEventListener('keydown', tecla)
+    return () => window.removeEventListener('keydown', tecla)
+  }, [n, onFechar])
+  if (n === 0) return null
+  const botao = 'rounded-full bg-white/15 p-2 text-white backdrop-blur hover:bg-white/30'
+  // Portal + stopPropagation: o clique aqui não pode chegar no card (que abriria o detalhe).
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 p-4"
+      onClick={(e) => { e.stopPropagation(); onFechar() }}
+      onPointerDown={(e) => e.stopPropagation()}
+    >
+      <img src={imagens[i].dataUrl} alt={p.titulo} className="max-h-full max-w-full rounded-lg object-contain" onClick={(e) => e.stopPropagation()} />
+      <div className="absolute right-4 top-4 flex gap-2" onClick={(e) => e.stopPropagation()}>
+        <button type="button" className={botao} onClick={onBaixar} aria-label="Baixar" title={n > 1 ? `Baixar as ${n} imagens` : 'Baixar'}><Download className="h-5 w-5" /></button>
+        <button type="button" className={botao} onClick={onFechar} aria-label="Fechar"><X className="h-5 w-5" /></button>
+      </div>
+      {n > 1 && (
+        <>
+          <button type="button" className={cn(botao, 'absolute left-4 top-1/2 -translate-y-1/2')} onClick={(e) => { e.stopPropagation(); setI((x) => (x - 1 + n) % n) }} aria-label="Anterior"><ChevronLeft className="h-6 w-6" /></button>
+          <button type="button" className={cn(botao, 'absolute right-4 top-1/2 -translate-y-1/2')} onClick={(e) => { e.stopPropagation(); setI((x) => (x + 1) % n) }} aria-label="Próxima"><ChevronRight className="h-6 w-6" /></button>
+          <span className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-black/60 px-3 py-1 text-xs text-white">{i + 1} / {n}</span>
+        </>
+      )}
+    </div>,
+    document.body,
+  )
+}
+
 /** Card compacto: miniatura da arte final, título, selos (ajuste, IA, aprovado), editor e prazo. */
 function CartaoProducao({ p, onAbrir, onExcluir, sobreposto }: {
   p: GcSocialProducao; onAbrir?: () => void; onExcluir?: () => void; sobreposto?: boolean
@@ -127,6 +167,20 @@ function CartaoProducao({ p, onAbrir, onExcluir, sobreposto }: {
   const resumo = resumoDaArte(p.descricao)
   const capa = capaDoCard(p)
   const nFinais = imagensFinais(p).length
+  const [ampliando, setAmpliando] = React.useState(false)
+  const [baixando, setBaixando] = React.useState(false)
+  const baixar = async () => {
+    setBaixando(true)
+    try {
+      await baixarArtesDoCard(p)
+    } catch (err) {
+      toast.error('Não consegui baixar: ' + (err as Error).message)
+    } finally {
+      setBaixando(false)
+    }
+  }
+  // Os botões não podem puxar o arraste do card nem abrir o card.
+  const semAbrir = { onPointerDown: (e: React.PointerEvent) => e.stopPropagation(), onClick: (e: React.MouseEvent) => e.stopPropagation() }
   return (
     <div
       role="button"
@@ -143,8 +197,34 @@ function CartaoProducao({ p, onAbrir, onExcluir, sobreposto }: {
         <div className="relative">
           <img src={capa} alt="" className="h-24 w-full object-cover" />
           {nFinais > 1 && <span className="absolute bottom-1 right-1 rounded bg-black/60 px-1.5 text-[10px] text-white">{nFinais} imagens</span>}
+          <div className="absolute left-1.5 top-1.5 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100 max-sm:opacity-100">
+            {nFinais > 0 && (
+              <button
+                type="button"
+                {...semAbrir}
+                onClick={(e) => { e.stopPropagation(); setAmpliando(true) }}
+                className="rounded-md bg-black/60 p-1 text-white hover:bg-accent"
+                aria-label="Ampliar"
+                title="Ampliar"
+              >
+                <Maximize2 className="h-3.5 w-3.5" />
+              </button>
+            )}
+            <button
+              type="button"
+              {...semAbrir}
+              onClick={(e) => { e.stopPropagation(); void baixar() }}
+              disabled={baixando}
+              className="rounded-md bg-black/60 p-1 text-white hover:bg-accent disabled:opacity-60"
+              aria-label={nFinais > 1 ? 'Baixar todas as imagens' : 'Baixar'}
+              title={nFinais > 1 ? `Baixar as ${nFinais} imagens` : 'Baixar'}
+            >
+              {baixando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+            </button>
+          </div>
         </div>
       )}
+      {ampliando && <AmpliarArte p={p} onFechar={() => setAmpliando(false)} onBaixar={() => void baixar()} />}
       {onExcluir && (
         <button
           type="button"

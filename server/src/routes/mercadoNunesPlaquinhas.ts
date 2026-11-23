@@ -15,7 +15,7 @@ const CAMPOS_CARTAZ = new Set([
   'produto', 'subtitulo', 'peso', 'preco', 'precoDe', 'unidade', 'textoFaixa', 'mostrarFaixa', 'mostrarDePor',
   'mostrarLogo', 'logoEsquerda', 'mostrarBolinhaPreco', 'minUnidades', 'mostrarPrecoAvulsoCaixa', 'precoAvulso',
   'caixaQtd', 'caixaPreco', 'precoLitro', 'precoQuilo', 'temaId', 'fonte', 'ajusteNome', 'ajusteSubtitulo',
-  'ajusteFaixa', 'ajustePreco', 'ajustePeso', 'mascoteId', 'mascoteLado', 'mascoteTamanho',
+  'ajusteFaixa', 'ajustePreco', 'ajustePeso', 'mascoteId', 'mascoteLado', 'mascoteTamanho', 'mascoteX', 'mascoteY',
 ]);
 
 function limpar(patch: unknown): Record<string, unknown> {

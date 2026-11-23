@@ -62,6 +62,9 @@ export interface DadosTabloide {
   mascoteLado?: 'esquerda' | 'direita'
   /** -6 a +8, cada passo = 10%. */
   mascoteTamanho?: number
+  /** Posição livre do centro do mascote, em % da arte (0–100). Fora disso (ou vazio) = automático pelo lado. */
+  mascoteX?: number
+  mascoteY?: number
 }
 
 /** URL de imagem que pode ir no src do mascote (data URL de imagem ou http/https/caminho do próprio site). */
@@ -647,8 +650,14 @@ export function montarPaginas(dados: DadosTabloide, logoUrl: string, opcoes: { a
   // Mascote no canto de baixo, por cima da grade, encostado no rodapé.
   const mascoteSrc = dados.mascoteId ? mascoteValido(dados.mascoteUrl) : ''
   const mascoteH = Math.round(md.h * 0.26 * (1 + 0.1 * Math.max(-6, Math.min(8, Number(dados.mascoteTamanho) || 0))))
+  const mx = Number(dados.mascoteX);
+  const my = Number(dados.mascoteY);
+  const mascotePos =
+    Number.isFinite(mx) && Number.isFinite(my) && mx >= 0 && my >= 0 && mx <= 100 && my <= 100
+      ? `left:${mx}%;top:${my}%;transform:translate(-50%,-50%)`
+      : `bottom:${md.padBot + rodH + (temRodape ? md.gap * 0.4 : 0)}px;${dados.mascoteLado === 'esquerda' ? 'left' : 'right'}:${Math.round(md.padX * 0.15)}px`;
   const mascote = mascoteSrc
-    ? `<img class="mascote" src="${esc(mascoteSrc)}" alt="" style="height:${mascoteH}px;bottom:${md.padBot + rodH + (temRodape ? md.gap * 0.4 : 0)}px;${dados.mascoteLado === 'esquerda' ? 'left' : 'right'}:${Math.round(md.padX * 0.15)}px">`
+    ? `<img class="mascote" src="${esc(mascoteSrc)}" alt="" style="height:${mascoteH}px;${mascotePos}">`
     : ''
   return paginas.map((itens, idx) => {
     const { cols, rows } = escolherGrade(itens, areaW, areaH)

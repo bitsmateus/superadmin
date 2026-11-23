@@ -111,6 +111,8 @@ async function prepararDados(bruto: Partial<DadosTabloide> | undefined): Promise
     mascoteUrl,
     mascoteLado: d.mascoteLado === 'esquerda' ? 'esquerda' : 'direita',
     mascoteTamanho: Math.max(-6, Math.min(8, Number(d.mascoteTamanho) || 0)),
+    mascoteX: typeof d.mascoteX === 'number' && d.mascoteX >= 0 && d.mascoteX <= 100 ? d.mascoteX : -1,
+    mascoteY: typeof d.mascoteY === 'number' && d.mascoteY >= 0 && d.mascoteY <= 100 ? d.mascoteY : -1,
     titulo: texto(d.titulo, 60),
     subtitulo: texto(d.subtitulo, 80),
     validade: texto(d.validade, 80),

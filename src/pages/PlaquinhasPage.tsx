@@ -186,7 +186,7 @@ export function PlaquinhasPage() {
   const [tamanhosMassa, setTamanhosMassa] = React.useState<Partial<Record<ChaveTamanho, number>>>({})
   const [opcoesMassa, setOpcoesMassa] = React.useState<Partial<Record<ChaveOpcao, boolean>>>({})
   // null = manter o mascote de cada uma; mascoteId '' = tirar o mascote de todas.
-  const [mascoteMassa, setMascoteMassa] = React.useState<{ mascoteId: string; mascoteLado: 'esquerda' | 'direita'; mascoteTamanho: number } | null>(null)
+  const [mascoteMassa, setMascoteMassa] = React.useState<{ mascoteId: string; mascoteLado: 'esquerda' | 'direita'; mascoteTamanho: number; mascoteX: number; mascoteY: number } | null>(null)
   // Impressão
   const [porFolha, setPorFolha] = React.useState<PorFolha>(4)
   const [corte, setCorte] = React.useState(true)
@@ -437,7 +437,7 @@ export function PlaquinhasPage() {
             ...(mascoteMassa ?? {}),
           }
           // O mascote conta como uma mudança só (id, lado e tamanho andam juntos).
-          const mudancas = Object.keys(patch).length - (mascoteMassa ? 2 : 0)
+          const mudancas = Object.keys(patch).length - (mascoteMassa ? 4 : 0)
           const posAmostra = Math.min(amostra, Math.max(0, alvo.length - 1))
           const placaAmostra = alvo[posAmostra] ?? null
           const base: Cartaz = placaAmostra ? cartazDe(placaAmostra) : { ...CARTAZ_PADRAO, subtitulo: '', ajustePreco: AJUSTE_PRECO_PADRAO }
@@ -603,8 +603,8 @@ export function PlaquinhasPage() {
                     <div style={subtitulo}>Mascote</div>
                     <p style={{ fontSize: 11, color: '#9A928B', margin: '0 0 8px' }}>“Manter” não mexe no mascote de cada uma. Suba o PNG já sem fundo.</p>
                     <EscolherMascote
-                      valor={mascoteMassa ?? { mascoteId: '', mascoteLado: 'direita', mascoteTamanho: 0 }}
-                      onMuda={(v) => setMascoteMassa({ mascoteId: v.mascoteId ?? '', mascoteLado: v.mascoteLado ?? 'direita', mascoteTamanho: v.mascoteTamanho ?? 0 })}
+                      valor={mascoteMassa ?? { mascoteId: '', mascoteLado: 'direita', mascoteTamanho: 0, mascoteX: -1, mascoteY: -1 }}
+                      onMuda={(v) => setMascoteMassa({ mascoteId: v.mascoteId ?? '', mascoteLado: v.mascoteLado ?? 'direita', mascoteTamanho: v.mascoteTamanho ?? 0, mascoteX: v.mascoteX ?? -1, mascoteY: v.mascoteY ?? -1 })}
                       semEscolha={{ ativo: mascoteMassa === null, onManter: () => setMascoteMassa(null) }}
                     />
                   </div>

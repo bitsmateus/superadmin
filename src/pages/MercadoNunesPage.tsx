@@ -96,6 +96,9 @@ export interface Cartaz {
   mascoteId?: string
   mascoteLado?: 'esquerda' | 'direita'
   mascoteTamanho?: number
+  /** Centro do mascote em % da arte; -1/vazio = automático pelo lado. */
+  mascoteX?: number
+  mascoteY?: number
 }
 
 export const CARTAZ_PADRAO: Cartaz = {
@@ -300,8 +303,9 @@ export function CartazA4({ dados }: { dados: Cartaz }) {
           style={{
             position: 'absolute',
             zIndex: 5,
-            bottom: 34,
-            [dados.mascoteLado === 'esquerda' ? 'left' : 'right']: 14,
+            ...((dados.mascoteX ?? -1) >= 0 && (dados.mascoteY ?? -1) >= 0
+              ? { left: `${dados.mascoteX}%`, top: `${dados.mascoteY}%`, transform: 'translate(-50%, -50%)' }
+              : { bottom: 34, [dados.mascoteLado === 'esquerda' ? 'left' : 'right']: 14 }),
             height: Math.round(330 * (1 + 0.1 * Math.max(-6, Math.min(8, dados.mascoteTamanho ?? 0)))),
             maxWidth: '48%',
             objectFit: 'contain',

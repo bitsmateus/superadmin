@@ -13,6 +13,9 @@ export interface ValorMascote {
   mascoteId?: string
   mascoteLado?: 'esquerda' | 'direita'
   mascoteTamanho?: number
+  /** Centro do mascote em % da arte (0–100). -1/vazio = automático (canto de baixo, pelo lado). */
+  mascoteX?: number
+  mascoteY?: number
 }
 
 const XADREZ: React.CSSProperties = {
@@ -70,6 +73,18 @@ export function EscolherMascote({
   const lado = valor.mascoteLado ?? 'direita'
   const tamanho = valor.mascoteTamanho ?? 0
   const manter = !!semEscolha?.ativo
+  const livre = (valor.mascoteX ?? -1) >= 0 && (valor.mascoteY ?? -1) >= 0
+  // Ponto de partida dos controles quando ainda está no automático: o canto de baixo do lado escolhido.
+  const x = livre ? (valor.mascoteX as number) : lado === 'esquerda' ? 14 : 86
+  const y = livre ? (valor.mascoteY as number) : 80
+  const posicionar = (nx: number, ny: number) => onMuda({ ...valor, mascoteX: Math.round(nx), mascoteY: Math.round(ny) })
+  const PRESETS: { rotulo: string; x: number; y: number }[] = [
+    { rotulo: '↖ Cima esq.', x: 14, y: 16 },
+    { rotulo: '↗ Cima dir.', x: 86, y: 16 },
+    { rotulo: '● Meio', x: 50, y: 50 },
+    { rotulo: '↙ Baixo esq.', x: 14, y: 80 },
+    { rotulo: '↘ Baixo dir.', x: 86, y: 80 },
+  ]
 
   const enviar = async (arquivos: FileList | null) => {
     if (!arquivos?.length) return
@@ -86,7 +101,7 @@ export function EscolherMascote({
       }
       await recarregar()
       if (ultimo) {
-        onMuda({ mascoteId: ultimo.id, mascoteLado: lado, mascoteTamanho: tamanho })
+        onMuda({ ...valor, mascoteId: ultimo.id })
         toast.success('Mascote salvo. Ele fica guardado pra usar de novo.')
       }
     } catch (e) {
@@ -143,7 +158,7 @@ export function EscolherMascote({
             <button
               type="button"
               title={m.nome}
-              onClick={() => onMuda({ mascoteId: m.id, mascoteLado: lado, mascoteTamanho: tamanho })}
+              onClick={() => onMuda({ ...valor, mascoteId: m.id })}
               style={{ ...quadro(!manter && valor.mascoteId === m.id), ...XADREZ }}
             >
               <img src={urlDoMascote(m.id)} alt={m.nome} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
@@ -177,7 +192,7 @@ export function EscolherMascote({
               <button
                 key={l}
                 type="button"
-                onClick={() => onMuda({ ...valor, mascoteLado: l })}
+                onClick={() => onMuda({ ...valor, mascoteLado: l, mascoteX: -1, mascoteY: -1 })}
                 style={{
                   border: 'none',
                   borderRadius: 999,
@@ -186,9 +201,9 @@ export function EscolherMascote({
                   fontWeight: 700,
                   cursor: 'pointer',
                   fontFamily: 'inherit',
-                  background: lado === l ? '#fff' : 'transparent',
-                  color: lado === l ? '#C1503F' : '#7A716A',
-                  boxShadow: lado === l ? '0 1px 3px rgba(0,0,0,.12)' : 'none',
+                  background: !livre && lado === l ? '#fff' : 'transparent',
+                  color: !livre && lado === l ? '#C1503F' : '#7A716A',
+                  boxShadow: !livre && lado === l ? '0 1px 3px rgba(0,0,0,.12)' : 'none',
                 }}
               >
                 {l === 'esquerda' ? '◀ Esquerda' : 'Direita ▶'}
@@ -200,6 +215,38 @@ export function EscolherMascote({
             <input type="range" min={-6} max={8} step={1} value={tamanho} onChange={(e) => onMuda({ ...valor, mascoteTamanho: Number(e.target.value) })} style={{ flex: 1, accentColor: '#C1503F' }} />
             <span style={{ width: 26, textAlign: 'right' }}>{tamanho > 0 ? `+${tamanho}` : tamanho}</span>
           </label>
+          <div style={{ flexBasis: '100%', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {PRESETS.map((p) => {
+                const ativo = livre && x === p.x && y === p.y
+                return (
+                  <button
+                    key={p.rotulo}
+                    type="button"
+                    onClick={() => posicionar(p.x, p.y)}
+                    style={{ border: ativo ? '1px solid #C1503F' : '1px solid #E7E1D9', background: ativo ? '#FDF1EE' : '#fff', color: ativo ? '#C1503F' : '#5B534D', borderRadius: 999, padding: '4px 10px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}
+                  >
+                    {p.rotulo}
+                  </button>
+                )
+              })}
+              {livre && (
+                <button type="button" onClick={() => onMuda({ ...valor, mascoteX: -1, mascoteY: -1 })} style={{ border: 'none', background: 'transparent', color: '#9A928B', fontSize: 12, fontWeight: 700, cursor: 'pointer', textDecoration: 'underline', fontFamily: 'inherit' }}>
+                  Voltar ao automático
+                </button>
+              )}
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 600, color: '#5B534D' }}>
+              <span style={{ width: 78 }}>Horizontal</span>
+              <input type="range" min={0} max={100} step={1} value={x} onChange={(e) => posicionar(Number(e.target.value), y)} style={{ flex: 1, accentColor: '#C1503F' }} />
+              <span style={{ width: 34, textAlign: 'right' }}>{Math.round(x)}%</span>
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 600, color: '#5B534D' }}>
+              <span style={{ width: 78 }}>Vertical</span>
+              <input type="range" min={0} max={100} step={1} value={y} onChange={(e) => posicionar(x, Number(e.target.value))} style={{ flex: 1, accentColor: '#C1503F' }} />
+              <span style={{ width: 34, textAlign: 'right' }}>{Math.round(y)}%</span>
+            </label>
+          </div>
         </div>
       )}
     </div>

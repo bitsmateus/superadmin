@@ -32,6 +32,45 @@ test('relatório em tabela: preço de/por, ignora inativo e repetido', () => {
   assert.equal(r.itens[1].peso, '800G');
 });
 
+test('blocos: promoção que não gera preço e nome colado no Ativo não contaminam a anterior', () => {
+  const r = lerRelatorio(
+    [
+      'C?digo: 795 - CERV.LOHN PREMIUN 600ML Ativo: SIM Gerar Pre?os: SIM',
+      'Data do In?cio: 23/11/2026 Data do Fim: 30/11/2026',
+      'Qtd. p/ ativar: 6,00 Valor promo??o: 4,19',
+      'DESCONTO 108142 73343 CERV.LOHN PREMIUM 600ml LAGER 6,00',
+      'C?digo: 1126 - Reembolso fixo de R$ 1,02 por unidade / Consulte eAtivo: SIM Gerar Pre?os: N?O',
+      'Data do In?cio: 27/11/2026 Data do Fim: 29/11/2026',
+      'Qtd. p/ ativar: 1,00 Valor promo??o: 8,49',
+      'DESCONTO 102750 65194 ALIM.SOJA ADES 1L ORIGINAL 1,00',
+    ],
+    HOJE,
+  );
+  assert.equal(r.itens.length, 1);
+  assert.equal(r.itens[0].preco, '4,19');
+  assert.equal(r.itens[0].fim, '30/11/2026');
+  assert.equal(r.inativos, 1);
+});
+
+test('relatório "Produtos por Promoção": uma linha por produto', () => {
+  const r = lerRelatorio(
+    [
+      'Produto C?d. Barras Nome Vlr. Venda Vlr. Promo? Data do In?cio Data do Fim',
+      '102112 5000329002537 BEB.GIN BEEFEATER LONDON 750ML 0,00 89,00 23/11/2026 30/11/2026',
+      '112836 7898349705532 RACAO BIRBO 10,1Kg CARNE 0,00 69,90 23/11/2026 30/11/2026',
+      '3304 7896022200756 MACAR.GALO 500G ESPAGUETE 12,00 2,99 23/11/2026 30/11/2026',
+    ],
+    HOJE,
+  );
+  assert.equal(r.modelo, 'produtos');
+  assert.equal(r.itens.length, 3);
+  assert.equal(r.itens[0].produtoId, '102112');
+  assert.equal(r.itens[0].preco, '89,00');
+  assert.equal(r.itens[0].precoDe, '');
+  assert.equal(r.itens[2].precoDe, '12,00');
+  assert.equal(r.itens[2].fim, '30/11/2026');
+});
+
 test('relatório em blocos: quantidade mínima, sem fim e vencidos', () => {
   const r = lerRelatorio(
     [

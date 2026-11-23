@@ -28,7 +28,7 @@ export interface ItemRelatorio {
 }
 
 export interface ResultadoRelatorio {
-  modelo: 'tabela' | 'blocos';
+  modelo: 'tabela' | 'blocos' | 'produtos';
   itens: ItemRelatorio[];
   /** Linhas inativas (Ativo = NÃO) que ficaram de fora. */
   inativos: number;
@@ -125,7 +125,12 @@ const RE_TABELA = new RegExp(
   'i',
 );
 const RE_SECAO = /^Se.{1,3}o:\s*(.+)$/i;
-const RE_BLOCO = /^C.digo:\s*(\d+)\s*-\s*(.+?)\s+Ativo:\s*(SIM|N.?O)\b/i;
+// O nome da promoção às vezes cola no "Ativo:" ("...Consulte eAtivo: SIM"), por isso \s* e não \s+.
+const RE_BLOCO = /^C.digo:\s*(\d+)\s*-\s*(.+?)\s*Ativo:\s*(SIM|N.?O)\b(?:.*?Gerar Pre.{1,3}os:\s*(SIM|N.?O))?/i;
+// "Produtos por Promoção": `produto EAN NOME vlr.venda vlr.promo início fim`.
+const RE_PRODUTOS = new RegExp(
+  String.raw`^(\d+)\s+(\d{6,14})\s+(.+?)\s+(${NUM})\s+(${NUM})\s+(\d{2}/\d{2}/\d{4})\s+(\d{2}/\d{2}/\d{4})$`,
+);
 
 const semMilhar = (v: string) => v.replace(/\./g, '');
 const dinheiro = (v: string) => {
@@ -156,6 +161,22 @@ export function lerRelatorio(linhas: string[], hoje: Date = new Date()): Resulta
   };
 
   const ehBlocos = linhas.some((l) => RE_BLOCO.test(l));
+  if (!ehBlocos && linhas.some((l) => RE_PRODUTOS.test(l))) {
+    for (const l of linhas) {
+      const m = RE_PRODUTOS.exec(l);
+      if (!m) continue;
+      const venda = dinheiro(m[4]);
+      const promo = dinheiro(m[5]);
+      if (!Number.isFinite(promo) || promo <= 0) continue;
+      const { produto, peso } = limparNome(m[3]);
+      juntar({
+        produtoId: m[1], ean: m[2], grupo: '', nomeOriginal: m[3].trim(), produto, peso,
+        preco: m[5], precoDe: Number.isFinite(venda) && venda > promo ? m[4] : '',
+        minUnidades: '', inicio: m[6], fim: fimUtil(m[7]),
+      });
+    }
+    return { modelo: 'produtos', itens, inativos, repetidos, vencidos };
+  }
   if (!ehBlocos) {
     let grupo = '';
     for (const l of linhas) {
@@ -211,7 +232,8 @@ export function lerRelatorio(linhas: string[], hoje: Date = new Date()): Resulta
     const h = RE_BLOCO.exec(l);
     if (h) {
       fechar();
-      atual = { nome: h[2].trim(), ativo: /^SIM$/i.test(h[3]), inicio: '', fim: '', qtd: '', valor: '', produtoId: '', ean: '', descri: '' };
+      // "Gerar Preços: NÃO" (reembolso do fornecedor etc.) não muda o preço no caixa: não vira plaquinha.
+      atual = { nome: h[2].trim(), ativo: /^SIM$/i.test(h[3]) && !(h[4] && !/^SIM$/i.test(h[4])), inicio: '', fim: '', qtd: '', valor: '', produtoId: '', ean: '', descri: '' };
       continue;
     }
     if (!atual) continue;

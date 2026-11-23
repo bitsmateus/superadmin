@@ -7,11 +7,13 @@ import { useCurrentUser } from '@/hooks/useClients'
 import { db } from '@/services/db'
 import { asText, cn } from '@/lib/utils'
 import { timeAgo } from '@/lib/time'
+import { marcosDoCliente } from '@/lib/linhaDoTempoDoCliente'
 import type { Client } from '@/types/client'
 
 /**
  * Notas internas do cliente: o espaço do time de suporte pra registrar pontos de atendimento, pendências, combinados e o que
- * mais precisar lembrar. Só o time vê. Fica separado das outras notas do cliente: aqui só aparece o que foi escrito nesta aba.
+ * mais precisar lembrar. Só o time vê. Aqui só aparece o que foi escrito nesta aba (e o briefing que o cliente preencheu), junto
+ * com a linha do tempo do cliente: briefing gerado/enviado/preenchido, mudanças de etapa, reunião, entrega.
  */
 export function NotasInternasTab({ client }: { client: Client }) {
   const [user] = useCurrentUser()
@@ -19,10 +21,12 @@ export function NotasInternasTab({ client }: { client: Client }) {
   const [editandoId, setEditandoId] = React.useState<string | null>(null)
   const [textoEdicao, setTextoEdicao] = React.useState('')
 
-  const notas = React.useMemo(
-    () => (client.notes ?? []).filter((n) => n.origem === 'notas_internas').sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
-    [client.notes],
-  )
+  // Notas do time e marcos do cliente numa lista só, do mais novo pro mais antigo.
+  const linha = React.useMemo(() => {
+    const notas = (client.notes ?? []).filter((n) => n.origem === 'notas_internas').map((n) => ({ tipo: 'nota' as const, em: n.createdAt, n }))
+    const marcos = marcosDoCliente(client.logs).map((l) => ({ tipo: 'marco' as const, em: l.createdAt, l }))
+    return [...notas, ...marcos].sort((a, b) => b.em.localeCompare(a.em))
+  }, [client.notes, client.logs])
 
   const registrar = () => {
     const t = texto.trim()
@@ -49,6 +53,7 @@ export function NotasInternasTab({ client }: { client: Client }) {
       >
         <p className="mb-3 text-xs text-foreground/50">
           Só o time vê. Use pra anotar pontos de atendimento, pendências, combinados e tudo que o próximo a atender precisa saber.
+          Abaixo, as notas e a linha do tempo do cliente (briefing, etapas, entrega) juntas.
         </p>
         <div className="space-y-2">
           <textarea
@@ -70,11 +75,32 @@ export function NotasInternasTab({ client }: { client: Client }) {
         </div>
 
         <div className="mt-5">
-          {notas.length === 0 ? (
-            <p className="text-xs text-foreground/40">Nenhuma nota interna ainda.</p>
+          {linha.length === 0 ? (
+            <p className="text-xs text-foreground/40">Nenhuma nota interna nem movimento do cliente ainda.</p>
           ) : (
             <ul className="space-y-2.5">
-              {notas.map((n) => (
+              {linha.map((item) => {
+                if (item.tipo === 'marco') {
+                  const l = item.l
+                  return (
+                    <li key={`marco:${l.id}`} className="flex items-start gap-3 px-1">
+                      <span className="mt-1.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-elevate/[0.04] ring-1 ring-line">
+                        <span className="h-1.5 w-1.5 rounded-full bg-accent" />
+                      </span>
+                      <div className="min-w-0 flex-1 rounded-md border border-line bg-elevate/[0.02] px-3 py-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-sm text-foreground/90">{asText(l.action)}</span>
+                          <span className="shrink-0 text-[10px] text-foreground/40" title={new Date(l.createdAt).toLocaleString('pt-BR')}>
+                            {timeAgo(l.createdAt)}
+                          </span>
+                        </div>
+                        {l.detail && <p className="mt-0.5 text-xs text-foreground/55">{asText(l.detail)}</p>}
+                      </div>
+                    </li>
+                  )
+                }
+                const n = item.n
+                return (
                 <li key={n.id} className={cn('rounded-lg border border-warning/30 bg-warning/[0.06] p-3')}>
                   <div className="flex items-start justify-between gap-2">
                     <span className="text-xs font-medium text-foreground">{asText(n.author, '—')}</span>
@@ -147,7 +173,8 @@ export function NotasInternasTab({ client }: { client: Client }) {
                     <p className="mt-1.5 whitespace-pre-wrap break-words text-sm text-foreground/85">{asText(n.text)}</p>
                   )}
                 </li>
-              ))}
+                )
+              })}
             </ul>
           )}
         </div>

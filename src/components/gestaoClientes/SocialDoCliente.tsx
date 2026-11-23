@@ -14,7 +14,7 @@ import { useTeamProfiles } from '@/hooks/useTeamProfiles'
 import { useKanbanSensors } from '@/hooks/useKanbanSensors'
 import { gestaoClientes, type GcSocialMaterial, type GcSocialProducao, type GcSocialStatus } from '@/services/gestaoClientes'
 import {
-  ETAPAS_ARTE, MAX_BYTES, anexarMidia, baixarArtesDoCard, capaDoCard, copiar, enderecoDoPortal, imagensFinais, lerArquivo, mesDeHoje, nomeDoMes, opcoesDeMes, somarMes,
+  ETAPAS_ARTE, MAX_BYTES, anexarMidia, baixarArtesDoCard, baixarZipDasArtes, capaDoCard, midiasFinais, copiar, enderecoDoPortal, imagensFinais, lerArquivo, mesDeHoje, nomeDoMes, opcoesDeMes, somarMes,
 } from '@/lib/socialArtes'
 import { cn } from '@/lib/utils'
 import { DetalheDaArte } from './social/DetalheDaArte'
@@ -159,8 +159,10 @@ function AmpliarArte({ p, onFechar, onBaixar }: { p: GcSocialProducao; onFechar:
 }
 
 /** Card compacto: miniatura da arte final, título, selos (ajuste, IA, aprovado), editor e prazo. */
-function CartaoProducao({ p, onAbrir, onExcluir, sobreposto }: {
+function CartaoProducao({ p, onAbrir, onExcluir, sobreposto, selecao }: {
   p: GcSocialProducao; onAbrir?: () => void; onExcluir?: () => void; sobreposto?: boolean
+  /** Modo "selecionar": clicar no card marca/desmarca em vez de abrir. */
+  selecao?: { marcado: boolean; onAlternar: () => void }
 }) {
   const fechada = p.status === 'aprovado' || p.status === 'trafego'
   const atrasada = p.prazo && p.prazo < hojeISO() && !fechada && p.status !== 'com_cliente'
@@ -185,11 +187,12 @@ function CartaoProducao({ p, onAbrir, onExcluir, sobreposto }: {
     <div
       role="button"
       tabIndex={0}
-      onClick={onAbrir}
-      onKeyDown={(e) => { if (e.key === 'Enter') onAbrir?.() }}
+      onClick={selecao ? selecao.onAlternar : onAbrir}
+      onKeyDown={(e) => { if (e.key === 'Enter') (selecao ? selecao.onAlternar : onAbrir)?.() }}
       className={cn(
         'group relative block w-full cursor-grab overflow-hidden rounded-xl border bg-surface text-left shadow-sm transition-colors hover:border-accent/40 active:cursor-grabbing',
         p.ajuste_pedido ? 'border-danger/50' : 'border-line',
+        selecao?.marcado && 'border-accent ring-2 ring-accent/40',
         sobreposto && 'shadow-lg ring-1 ring-accent/30',
       )}
     >
@@ -197,7 +200,7 @@ function CartaoProducao({ p, onAbrir, onExcluir, sobreposto }: {
         <div className="relative">
           <img src={capa} alt="" className="h-24 w-full object-cover" />
           {nFinais > 1 && <span className="absolute bottom-1 right-1 rounded bg-black/60 px-1.5 text-[10px] text-white">{nFinais} imagens</span>}
-          <div className="absolute left-1.5 top-1.5 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100 max-sm:opacity-100">
+          <div className="absolute left-1.5 top-1.5 flex gap-1">
             {nFinais > 0 && (
               <button
                 type="button"
@@ -225,7 +228,10 @@ function CartaoProducao({ p, onAbrir, onExcluir, sobreposto }: {
         </div>
       )}
       {ampliando && <AmpliarArte p={p} onFechar={() => setAmpliando(false)} onBaixar={() => void baixar()} />}
-      {onExcluir && (
+      {selecao && (
+        <span className={cn('absolute right-1.5 top-1.5 z-10 flex h-5 w-5 items-center justify-center rounded-md border-2 text-[11px] font-bold', selecao.marcado ? 'border-accent bg-accent text-white' : 'border-white bg-black/40 text-transparent')}>✓</span>
+      )}
+      {onExcluir && !selecao && (
         <button
           type="button"
           onPointerDown={(e) => e.stopPropagation()}
@@ -719,6 +725,9 @@ export function SocialDoCliente({ clienteId }: { clienteId: string }) {
   const [aprovacaoAberta, setAprovacaoAberta] = React.useState(false)
   const [postarAberto, setPostarAberto] = React.useState(false)
   const [avulsoAberto, setAvulsoAberto] = React.useState(false)
+  const [selecionando, setSelecionando] = React.useState(false)
+  const [marcados, setMarcados] = React.useState<Set<string>>(new Set())
+  const [baixandoZip, setBaixandoZip] = React.useState(false)
   const doMes = (m: string | null) => (m ? producao.filter((p) => p.mes === m) : producao)
   const producaoNoPeriodo = doMes(mes)
   const rotuloPeriodo = mes ? nomeDoMes(mes) : ''
@@ -880,6 +889,33 @@ export function SocialDoCliente({ clienteId }: { clienteId: string }) {
   const links = materiais.filter((m) => m.tipo === 'link')
   const arquivos = materiais.filter((m) => m.tipo === 'arquivo')
   const noTrafego = producaoNoPeriodo.filter((p) => p.status === 'trafego')
+  const comArte = producaoNoPeriodo.filter((p) => midiasFinais(p).length > 0)
+  const alternarMarca = (id: string) =>
+    setMarcados((s) => {
+      const n = new Set(s)
+      if (n.has(id)) n.delete(id)
+      else n.add(id)
+      return n
+    })
+  const sairDaSelecao = () => {
+    setSelecionando(false)
+    setMarcados(new Set())
+  }
+  const baixarZip = async (cards: GcSocialProducao[], rotulo: string) => {
+    const lista = cards.filter((c) => midiasFinais(c).length > 0)
+    if (lista.length === 0) return void toast.error('Nenhuma arte pra baixar')
+    setBaixandoZip(true)
+    const t = toast.loading('Preparando o ZIP…')
+    try {
+      const nome = `artes-${rotulo}-${new Date().toISOString().slice(0, 10)}.zip`
+      const n = await baixarZipDasArtes(lista, nome, (f, total) => toast.loading(`Preparando o ZIP… ${f} de ${total}`, { id: t }))
+      toast.success(`${n} arquivo${n === 1 ? '' : 's'} baixado${n === 1 ? '' : 's'}`, { id: t })
+    } catch (err) {
+      toast.error('Falha ao baixar: ' + (err as Error).message, { id: t })
+    } finally {
+      setBaixandoZip(false)
+    }
+  }
 
   return (
     <div className="space-y-5">
@@ -898,6 +934,25 @@ export function SocialDoCliente({ clienteId }: { clienteId: string }) {
             )}
           </div>
           <div className="flex flex-wrap gap-2">
+            {selecionando ? (
+              <>
+                <span className="flex items-center text-xs text-foreground/60">{marcados.size} selecionada{marcados.size === 1 ? '' : 's'}</span>
+                <Button size="sm" variant="ghost" onClick={() => setMarcados(new Set(comArte.map((p) => p.id)))}>Selecionar todas</Button>
+                <Button size="sm" leftIcon={<Download className="h-4 w-4" />} loading={baixandoZip} disabled={marcados.size === 0} onClick={() => void baixarZip(producaoNoPeriodo.filter((p) => marcados.has(p.id)), 'selecionadas')}>
+                  Baixar selecionadas
+                </Button>
+                <Button size="sm" variant="secondary" onClick={sairDaSelecao}>Cancelar</Button>
+              </>
+            ) : (
+              <>
+                <Button size="sm" variant="secondary" leftIcon={<Download className="h-4 w-4" />} loading={baixandoZip} disabled={comArte.length === 0} onClick={() => void baixarZip(comArte, mes ?? 'todas')} title="Baixa todas as artes dos cards listados num ZIP">
+                  Baixar todas as artes
+                </Button>
+                <Button size="sm" variant="secondary" onClick={() => setSelecionando(true)} title="Marcar cards e baixar só os marcados">
+                  Selecionar
+                </Button>
+              </>
+            )}
             <Button size="sm" variant="secondary" leftIcon={<Send className="h-4 w-4" />} onClick={() => setAvulsoAberto(true)} title="Subir imagens/vídeos e postar direto, sem passar por No tráfego">
               Postar avulso
             </Button>
@@ -947,7 +1002,7 @@ export function SocialDoCliente({ clienteId }: { clienteId: string }) {
                   )}
                   {itens.map((p) => (
                     <CartaoArrastavel key={p.id} id={p.id}>
-                      <CartaoProducao p={p} onAbrir={() => setVendoId(p.id)} onExcluir={() => void excluir(p)} />
+                      <CartaoProducao p={p} onAbrir={() => setVendoId(p.id)} onExcluir={() => void excluir(p)} selecao={selecionando ? { marcado: marcados.has(p.id), onAlternar: () => alternarMarca(p.id) } : undefined} />
                     </CartaoArrastavel>
                   ))}
                 </ColunaProducao>

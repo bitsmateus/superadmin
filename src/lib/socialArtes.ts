@@ -61,6 +61,40 @@ export async function baixarAnexo(a: GcSocialAnexo): Promise<void> {
   salvarComo(a.dataUrl, a.name || 'arte')
 }
 
+/**
+ * Baixa as artes finais de vários cards num único ZIP (um arquivo só, em vez de dezenas de downloads que o
+ * navegador bloquearia). Os arquivos levam o título do card; card com mais de uma arte ganha -1, -2...
+ * Devolve quantos arquivos entraram.
+ */
+export async function baixarZipDasArtes(cards: Pick<GcSocialProducao, 'titulo' | 'anexos'>[], nomeZip: string, aoAndar?: (feitos: number, total: number) => void): Promise<number> {
+  const { default: JSZip } = await import('jszip')
+  const zip = new JSZip()
+  const usados = new Set<string>()
+  const total = cards.reduce((s, c) => s + midiasFinais(c).length, 0)
+  let feitos = 0
+  const limpar = (t: string) => t.replace(/^(arte|reels|criativo|post)\s*:\s*/i, '').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80) || 'arte'
+  for (const card of cards) {
+    const midias = midiasFinais(card)
+    for (let i = 0; i < midias.length; i++) {
+      const a = midias[i]
+      const ext = (/\.([a-z0-9]{2,4})$/i.exec(a.name)?.[1] ?? (a.type.split('/')[1] || 'bin').replace('jpeg', 'jpg')).toLowerCase()
+      const base = limpar(card.titulo) + (midias.length > 1 ? `-${i + 1}` : '')
+      let nome = `${base}.${ext}`
+      for (let n = 2; usados.has(nome.toLowerCase()); n++) nome = `${base} (${n}).${ext}`
+      usados.add(nome.toLowerCase())
+      if (a.videoId) zip.file(nome, await gestaoClientes.baixarVideo(a.videoId))
+      else zip.file(nome, a.dataUrl.slice(a.dataUrl.indexOf(',') + 1), { base64: true })
+      aoAndar?.(++feitos, total)
+    }
+  }
+  if (total === 0) return 0
+  const blob = await zip.generateAsync({ type: 'blob', compression: 'STORE' })
+  const url = URL.createObjectURL(blob)
+  salvarComo(url, nomeZip)
+  window.setTimeout(() => URL.revokeObjectURL(url), 10_000)
+  return total
+}
+
 /** Baixa toda a arte final de um card (uma por vez, com um respiro pro navegador não bloquear). */
 export async function baixarArtesDoCard(p: Pick<GcSocialProducao, 'anexos'>): Promise<number> {
   const lista = midiasFinais(p)

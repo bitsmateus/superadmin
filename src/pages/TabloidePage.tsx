@@ -1189,6 +1189,22 @@ function Historico({
     onPasta(null)
     carregar()
   }
+  // Pastas marcadas pra juntar numa só (pra postar tudo em conjunto).
+  const [pastasMarcadas, setPastasMarcadas] = React.useState<string[]>([])
+  const juntarPastas = async () => {
+    const sugestao = `Importação ${new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} · junta`
+    const nome = window.prompt(`Juntar ${pastasMarcadas.length} pastas numa só. Nome da pasta:`, sugestao)?.trim()
+    if (!nome) return
+    try {
+      const r = await tabloideApi.juntarPastas(pastasMarcadas, nome)
+      toast.success(`${r.movidos} tabloides juntados em "${nome}"`)
+      setPastasMarcadas([])
+      carregar()
+      onPasta(nome)
+    } catch (e) {
+      toast.error((e as Error).message)
+    }
+  }
   const alternar = (id: string) => setMarcados((m) => (m.includes(id) ? m.filter((x) => x !== id) : [...m, id]))
   const selecionados = (lista ?? []).length ? marcados.map((id) => lista!.find((t) => t.id === id)).filter((t): t is TabloideSalvo => !!t) : []
 
@@ -1217,22 +1233,47 @@ function Historico({
     ) : (
       pastas.length > 0 && (
         <div className="mb-4">
-          <div className="mb-2 text-xs font-bold uppercase tracking-wide text-[#7A716A]">Importações do PDF</div>
+          <div className="mb-2 flex flex-wrap items-center gap-3">
+            <span className="text-xs font-bold uppercase tracking-wide text-[#7A716A]">Importações do PDF</span>
+            {pastas.length > 1 && (
+              <span className="text-xs text-[#7A716A]">
+                {pastasMarcadas.length ? `${pastasMarcadas.length} marcada${pastasMarcadas.length > 1 ? 's' : ''}` : 'Marque as pastas (caixinha) para juntar numa só.'}
+              </span>
+            )}
+            {pastasMarcadas.length > 0 && (
+              <button className="text-xs font-semibold text-[#7A716A] hover:underline" onClick={() => setPastasMarcadas([])}>
+                Limpar
+              </button>
+            )}
+            {pastasMarcadas.length > 1 && (
+              <button className={btnPrimario} onClick={() => void juntarPastas()}>
+                📁 Juntar {pastasMarcadas.length} pastas
+              </button>
+            )}
+          </div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {pastas.map((p) => (
-              <button
-                key={p.nome}
-                onClick={() => onPasta(p.nome)}
-                className="nunes-card flex items-center gap-3 p-3 text-left hover:ring-2 hover:ring-[#C1503F]/40"
-              >
-                <span className="flex-none overflow-hidden rounded-md bg-[#EDE8E1]">
-                  <MiniaturaTabloide dados={{ ...DADOS_VAZIOS(), ...p.capa.dados }} largura={56} />
-                </span>
-                <span className="min-w-0">
-                  <span className="block text-sm font-bold text-[#2A2622]">📁 {p.nome}</span>
-                  <span className="block text-xs text-[#7A716A]">{p.qtd} tabloide{p.qtd !== 1 ? 's' : ''}</span>
-                </span>
-              </button>
+              <div key={p.nome} className="relative">
+                <button
+                  onClick={() => onPasta(p.nome)}
+                  className="nunes-card flex w-full items-center gap-3 p-3 pr-9 text-left hover:ring-2 hover:ring-[#C1503F]/40"
+                >
+                  <span className="flex-none overflow-hidden rounded-md bg-[#EDE8E1]">
+                    <MiniaturaTabloide dados={{ ...DADOS_VAZIOS(), ...p.capa.dados }} largura={56} />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-bold text-[#2A2622]">📁 {p.nome}</span>
+                    <span className="block text-xs text-[#7A716A]">{p.qtd} tabloide{p.qtd !== 1 ? 's' : ''}</span>
+                  </span>
+                </button>
+                <input
+                  type="checkbox"
+                  aria-label={`Marcar a pasta ${p.nome} para juntar`}
+                  className="absolute right-3 top-3 h-4 w-4"
+                  checked={pastasMarcadas.includes(p.nome)}
+                  onChange={() => setPastasMarcadas((m) => (m.includes(p.nome) ? m.filter((x) => x !== p.nome) : [...m, p.nome]))}
+                />
+              </div>
             ))}
           </div>
         </div>

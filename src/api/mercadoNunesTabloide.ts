@@ -132,6 +132,7 @@ export const tabloideApi = {
   /** `pasta` = nome da importação do PDF (os tabloides dela ficam juntos, separados dos outros no Histórico). */
   criarTabloide: (titulo: string, dados: DadosTabloide, pasta?: string) => req<TabloideSalvo>('/tabloides', json({ titulo, dados, pasta })),
   excluirPasta: (pasta: string) => req<{ excluidos: number }>('/tabloides/excluir-pasta', json({ pasta })),
+  juntarPastas: (pastas: string[], destino: string) => req<{ movidos: number }>('/tabloides/juntar-pastas', json({ pastas, destino })),
   salvarTabloide: (id: string, titulo: string, dados: DadosTabloide) =>
     req<TabloideSalvo>(`/tabloides/${id}`, { method: 'PATCH', body: JSON.stringify({ titulo, dados }) }),
   removerTabloide: (id: string) => req<{ ok: true }>(`/tabloides/${id}`, { method: 'DELETE' }),

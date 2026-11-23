@@ -398,6 +398,16 @@ export async function mercadoNunesTabloideRoutes(app: FastifyInstance) {
     return { excluidos: r.length };
   });
 
+  /** Junta várias pastas de importação numa só: todos os tabloides passam a ficar na pasta `destino`. */
+  app.post<{ Body: { pastas?: string[]; destino?: string } }>(`${BASE}/tabloides/juntar-pastas`, async (req, reply) => {
+    const pastas = (Array.isArray(req.body?.pastas) ? req.body!.pastas! : []).map((p) => texto(p, 160).trim()).filter(Boolean);
+    const destino = texto(req.body?.destino, 160).trim();
+    if (pastas.length < 2) return reply.status(400).send({ message: 'Escolha pelo menos duas pastas.' });
+    if (!destino) return reply.status(400).send({ message: 'Dê um nome pra pasta.' });
+    const r = await query('UPDATE mn_tabloides SET pasta = $2, updated_at = NOW() WHERE pasta = ANY($1::text[]) RETURNING id', [pastas, destino]);
+    return { movidos: r.length };
+  });
+
   app.post<{ Body: { titulo?: string; dados?: unknown; pasta?: string } }>(`${BASE}/tabloides`, async (req, reply) => {
     const r = await queryOne(
       `INSERT INTO mn_tabloides (titulo, dados, criado_por, pasta) VALUES ($1, $2::jsonb, $3, $4) RETURNING id, titulo, dados, criado_por, pasta, created_at, updated_at`,

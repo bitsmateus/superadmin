@@ -15,7 +15,6 @@ import {
   Mail,
   MessageSquare,
   Monitor,
-  Paperclip,
   Pencil,
   Phone,
   PlusCircle,
@@ -25,15 +24,12 @@ import {
   Sparkles,
   StickyNote,
   Trash2,
-  UserCircle2,
-  X,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Section, FieldLabel } from '../ClientDrawer'
 import { Input } from '@/components/ui/Input'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
-import { useCurrentUser } from '@/hooks/useClients'
 import { useTeamProfiles, profileOptions } from '@/hooks/useTeamProfiles'
 import type { TeamArea } from '@/services/supabase'
 import { db } from '@/services/db'
@@ -41,10 +37,9 @@ import { api } from '@/services/api'
 import { useAuthStore } from '@/store/authStore'
 import { copyToClipboard } from '@/lib/clipboard'
 import { buildPendingMessage, computeReadiness } from '@/constants/readiness'
-import { asText, cn, formatDate, initials, normalizeWhatsappNumber } from '@/lib/utils'
+import { asText, cn, formatDate, normalizeWhatsappNumber } from '@/lib/utils'
 import { timeAgo } from '@/lib/time'
-import { pareceHtml, sanitizeHtml, stripHtml } from '@/lib/richText'
-import type { Client, ClientAccess, NoteAttachment } from '@/types/client'
+import type { Client, ClientAccess } from '@/types/client'
 import {
   API_CONFIG_STEPS,
   IA_CONFIG_STEPS,
@@ -69,64 +64,6 @@ function getAccesses(client: Client): ClientAccess[] {
 }
 
 export function OverviewTab({ client }: { client: Client }) {
-  const [user] = useCurrentUser()
-  const [noteText, setNoteText] = React.useState('')
-  const [noteInternal, setNoteInternal] = React.useState(false)
-  const [editingNoteId, setEditingNoteId] = React.useState<string | null>(null)
-  const [editingNoteText, setEditingNoteText] = React.useState('')
-  // Arquivos escolhidos pra próxima mensagem (ainda não enviados), cada um com a descrição que a pessoa escrever.
-  const [pendingFiles, setPendingFiles] = React.useState<PendingNoteFile[]>([])
-  const [sendingNote, setSendingNote] = React.useState(false)
-  const fileInputRef = React.useRef<HTMLInputElement>(null)
-
-  const pickFiles = async (files: File[]) => {
-    const next: PendingNoteFile[] = []
-    for (const file of files) {
-      if (file.size > MAX_NOTE_FILE_BYTES) {
-        toast.error(`"${file.name}" passa de 10MB`)
-        continue
-      }
-      next.push({ key: crypto.randomUUID(), file, description: '' })
-    }
-    setPendingFiles((prev) => [...prev, ...next])
-  }
-
-  const addNote = async () => {
-    const trimmed = noteText.trim()
-    if (!trimmed && pendingFiles.length === 0) return
-    if (!user) {
-      toast.error('Defina seu nome em Configurações antes de registrar notas.')
-      return
-    }
-    setSendingNote(true)
-    try {
-      const attachments: NoteAttachment[] = []
-      for (const p of pendingFiles) {
-        const dataUrl = await lerComoDataUrl(p.file)
-        const ficha = await db.uploadNoteFile(client.id, {
-          name: p.file.name || (p.file.type.startsWith('image/') ? 'print.png' : 'arquivo'),
-          type: p.file.type,
-          dataUrl,
-        })
-        attachments.push({ ...ficha, description: p.description.trim() || undefined })
-      }
-      db.addNote(client.id, trimmed, user, noteInternal, attachments)
-      db.addLog(
-        client.id,
-        (noteInternal ? 'Nota interna registrada' : 'Nota registrada') +
-          (attachments.length ? ` com ${attachments.length} anexo${attachments.length === 1 ? '' : 's'}` : ''),
-      )
-      setNoteText('')
-      setNoteInternal(false)
-      setPendingFiles([])
-      toast.success('Nota registrada')
-    } catch (err) {
-      toast.error('Falha ao anexar: ' + (err as Error).message)
-    } finally {
-      setSendingNote(false)
-    }
-  }
-
   // Radio: selecting a platform deselects the others
   const setPlatform = (flag: 'platformApp' | 'platformWeb' | 'platformChat') => {
     db.updateClient(client.id, {
@@ -268,232 +205,6 @@ export function OverviewTab({ client }: { client: Client }) {
               <span className="text-foreground/40">({timeAgo(client.createdAt)})</span>
             </p>
           </div>
-        </div>
-      </Section>
-
-      {/* Notas — logo abaixo de Dados do cliente, antes de Acessos */}
-      <Section
-        title={
-          <span className="flex items-center gap-2">
-            <StickyNote className="h-3.5 w-3.5 text-accent" />
-            Mensagens registradas
-          </span>
-        }
-      >
-        <div className="space-y-3">
-          <div className="flex items-start gap-2">
-            <textarea
-              value={noteText}
-              onChange={(e) => setNoteText(e.target.value)}
-              onPaste={(e) => {
-                // Print colado (Ctrl+V) vira anexo, igual ao bloco de atualizações do lead.
-                const files = Array.from(e.clipboardData.files)
-                if (files.length) {
-                  e.preventDefault()
-                  void pickFiles(files)
-                }
-              }}
-              placeholder="Registre aqui mensagens trocadas, observações ou qualquer informação relevante…"
-              className="min-h-[80px] flex-1 resize-y rounded-lg border border-line bg-surface px-3 py-2 text-sm text-foreground placeholder:text-foreground/30 focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/15"
-            />
-          </div>
-          {pendingFiles.length > 0 && (
-            <ul className="space-y-2">
-              {pendingFiles.map((p) => (
-                <li key={p.key} className="rounded-lg border border-line bg-surface p-2.5">
-                  <div className="flex items-center gap-2 text-sm">
-                    <FileText className="h-4 w-4 shrink-0 text-accent" />
-                    <span className="min-w-0 flex-1 truncate text-foreground/85" title={p.file.name}>{p.file.name}</span>
-                    <span className="shrink-0 text-[11px] text-foreground/40">{tamanhoLegivel(p.file.size)}</span>
-                    <button
-                      type="button"
-                      title="Tirar este arquivo"
-                      onClick={() => setPendingFiles((prev) => prev.filter((x) => x.key !== p.key))}
-                      className="grid h-7 w-7 shrink-0 place-items-center rounded text-foreground/40 hover:text-danger sm:h-6 sm:w-6"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                  <input
-                    value={p.description}
-                    onChange={(e) =>
-                      setPendingFiles((prev) => prev.map((x) => (x.key === p.key ? { ...x, description: e.target.value } : x)))
-                    }
-                    placeholder="Descrição do arquivo (opcional)"
-                    className="mt-2 h-9 w-full rounded-md border border-line bg-card px-2.5 text-sm text-foreground placeholder:text-foreground/30 focus:border-accent focus:outline-none"
-                  />
-                </li>
-              ))}
-            </ul>
-          )}
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              className="hidden"
-              onChange={(e) => {
-                void pickFiles(Array.from(e.target.files ?? []))
-                e.target.value = ''
-              }}
-            />
-            <label className="inline-flex items-center gap-2 text-xs text-foreground/65 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={noteInternal}
-                onChange={(e) => setNoteInternal(e.target.checked)}
-                className="h-3.5 w-3.5 accent-[#4F8EF7]"
-              />
-              <StickyNote className="h-3.5 w-3.5" />
-              Nota interna (só o time vê)
-            </label>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => fileInputRef.current?.click()}
-                leftIcon={<Paperclip className="h-3.5 w-3.5" />}
-              >
-                Anexar arquivo
-              </Button>
-              <Button
-                size="sm"
-                onClick={() => void addNote()}
-                loading={sendingNote}
-                disabled={!noteText.trim() && pendingFiles.length === 0}
-                leftIcon={<MessageSquare className="h-3.5 w-3.5" />}
-              >
-                {noteInternal ? 'Registrar nota interna' : 'Registrar mensagem'}
-              </Button>
-            </div>
-          </div>
-
-          {(client.notes ?? []).length === 0 ? (
-            <p className="text-xs text-foreground/40">Nenhuma mensagem ainda.</p>
-          ) : (
-            <ul className="space-y-2">
-              {(client.notes ?? []).map((n) => (
-                <li
-                  key={n.id}
-                  className={cn(
-                    'rounded-lg border p-3',
-                    n.internal
-                      ? 'border-warning/30 bg-warning/[0.06]'
-                      : 'border-line bg-elevate/[0.02]',
-                  )}
-                >
-                  <div className="flex items-start gap-3">
-                    <div className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-elevate/[0.04] text-[10px] font-medium text-foreground/85 ring-1 ring-line">
-                      {initials(n.author) || (
-                        <UserCircle2 className="h-3.5 w-3.5" />
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-foreground">
-                          {asText(n.author, '—')}
-                          {n.internal && (
-                            <span className="inline-flex items-center gap-1 rounded bg-warning/15 px-1.5 py-0.5 text-[10px] text-warning">
-                              <StickyNote className="h-3 w-3" />
-                              interna
-                            </span>
-                          )}
-                        </span>
-                        <div className="flex shrink-0 items-center gap-1">
-                          <span className="text-[10px] text-foreground/40">
-                            {timeAgo(n.createdAt)}
-                          </span>
-                          {editingNoteId !== n.id && (
-                            <>
-                              <button
-                                type="button"
-                                title="Editar nota"
-                                onClick={() => {
-                                  setEditingNoteId(n.id)
-                                  // Nota que veio do CRM está em HTML: na caixa de edição entra só o texto, com as quebras de linha.
-                                  setEditingNoteText(pareceHtml(n.text) ? stripHtml(n.text) : n.text)
-                                }}
-                                className="ml-1 grid h-5 w-5 place-items-center rounded text-foreground/35 hover:text-accent transition-colors"
-                              >
-                                <Pencil className="h-3 w-3" />
-                              </button>
-                              <button
-                                type="button"
-                                title="Excluir nota"
-                                onClick={() => {
-                                  db.deleteNote(client.id, n.id)
-                                  db.addLog(client.id, 'Nota excluída')
-                                  toast.success('Nota excluída')
-                                }}
-                                className="grid h-5 w-5 place-items-center rounded text-foreground/35 hover:text-danger transition-colors"
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </div>
-
-                      {editingNoteId === n.id ? (
-                        <div className="mt-2 space-y-2">
-                          <textarea
-                            value={editingNoteText}
-                            onChange={(e) => setEditingNoteText(e.target.value)}
-                            rows={3}
-                            className="w-full resize-y rounded-lg border border-accent/40 bg-surface px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/15"
-                            autoFocus
-                          />
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              type="button"
-                              onClick={() => setEditingNoteId(null)}
-                              className="px-2 py-1 text-xs text-foreground/50 hover:text-foreground transition-colors"
-                            >
-                              Cancelar
-                            </button>
-                            <button
-                              type="button"
-                              disabled={!editingNoteText.trim()}
-                              onClick={() => {
-                                const t = editingNoteText.trim()
-                                if (!t) return
-                                db.updateNote(client.id, n.id, t)
-                                db.addLog(client.id, 'Nota editada')
-                                toast.success('Nota atualizada')
-                                setEditingNoteId(null)
-                              }}
-                              className="inline-flex items-center gap-1 rounded-md bg-accent/15 px-2.5 py-1 text-xs font-medium text-accent hover:bg-accent/25 transition-colors disabled:opacity-40"
-                            >
-                              <Check className="h-3 w-3" />
-                              Salvar
-                            </button>
-                          </div>
-                        </div>
-                      ) : pareceHtml(n.text) ? (
-                        // Atualização copiada do CRM: mostra com a mesma formatação de lá (linhas, negrito, listas),
-                        // do mesmo jeito que o card do lead mostra — nunca as tags cruas.
-                        <div
-                          className="mt-1 whitespace-pre-wrap break-words text-sm text-foreground/85 [&_a]:text-accent [&_a]:underline [&_ol]:list-decimal [&_ol]:pl-5 [&_ul]:list-disc [&_ul]:pl-5"
-                          dangerouslySetInnerHTML={{ __html: sanitizeHtml(n.text) }}
-                        />
-                      ) : n.text.trim() ? (
-                        <p className="mt-1 whitespace-pre-wrap text-sm text-foreground/85">
-                          {asText(n.text)}
-                        </p>
-                      ) : null}
-                      {(n.attachments ?? []).length > 0 && (
-                        <ul className="mt-2 space-y-1.5">
-                          {n.attachments!.map((a) => (
-                            <NoteAttachmentItem key={a.id} attachment={a} />
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
         </div>
       </Section>
 
@@ -1506,93 +1217,5 @@ function CopyEditField({
         </div>
       )}
     </div>
-  )
-}
-
-// ─── Anexos das mensagens registradas ───────────────────────────────────────
-
-const MAX_NOTE_FILE_BYTES = 10 * 1024 * 1024
-
-interface PendingNoteFile {
-  key: string
-  file: File
-  description: string
-}
-
-function lerComoDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(reader.result as string)
-    reader.onerror = () => reject(reader.error ?? new Error('Não deu pra ler o arquivo'))
-    reader.readAsDataURL(file)
-  })
-}
-
-function tamanhoLegivel(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1).replace('.', ',')} MB`
-}
-
-/** Um anexo de mensagem: nome, descrição e tamanho. Clicar busca o conteúdo no servidor: imagem abre numa
- * janela aqui mesmo (abrir aba nova depois de esperar o download é bloqueado no iPhone); o resto é baixado. */
-function NoteAttachmentItem({ attachment: a }: { attachment: NoteAttachment }) {
-  const [abrindo, setAbrindo] = React.useState(false)
-  const [preview, setPreview] = React.useState<string | null>(null)
-  const ehImagem = a.type.startsWith('image/')
-
-  const baixar = (dataUrl: string) => {
-    const link = document.createElement('a')
-    link.href = dataUrl
-    link.download = a.name
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-  }
-
-  const abrir = async () => {
-    setAbrindo(true)
-    try {
-      const { dataUrl } = await db.noteFileContent(a.id)
-      if (ehImagem) setPreview(dataUrl)
-      else baixar(dataUrl)
-    } catch (err) {
-      toast.error('Não deu pra abrir o arquivo: ' + (err as Error).message)
-    } finally {
-      setAbrindo(false)
-    }
-  }
-
-  return (
-    <li>
-      <button
-        type="button"
-        onClick={() => void abrir()}
-        disabled={abrindo}
-        title={ehImagem ? 'Ver imagem' : 'Baixar'}
-        className="flex w-full items-start gap-2 rounded-md border border-line bg-surface px-2.5 py-2 text-left transition-colors hover:border-accent/40 disabled:opacity-60"
-      >
-        <Paperclip className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" />
-        <span className="min-w-0 flex-1">
-          <span className="block text-sm font-medium text-foreground/85">{a.name}</span>
-          {a.description && <span className="block text-xs text-foreground/60">{a.description}</span>}
-        </span>
-        <span className="shrink-0 text-[11px] text-foreground/40">{abrindo ? 'abrindo…' : tamanhoLegivel(a.size)}</span>
-      </button>
-      <Modal
-        open={!!preview}
-        onClose={() => setPreview(null)}
-        size="2xl"
-        title={a.name}
-        description={a.description}
-        footer={
-          <Button size="sm" variant="secondary" onClick={() => preview && baixar(preview)}>
-            Baixar
-          </Button>
-        }
-      >
-        {preview && <img src={preview} alt={a.description || a.name} className="mx-auto max-h-[70vh] w-auto rounded-lg" />}
-      </Modal>
-    </li>
   )
 }

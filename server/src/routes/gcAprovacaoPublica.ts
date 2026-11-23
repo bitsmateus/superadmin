@@ -26,7 +26,7 @@ const tituloPublico = (t: string) => t.replace(/^(arte|reels|criativo|carrossel)
 const nomeDoCliente = (v: unknown) => String(v ?? '').trim().slice(0, 80) || 'Cliente';
 
 // Visíveis no portal: as que esperam o cliente, as que ele pediu ajuste (em correção) e as aprovadas nos últimos 60 dias.
-const VISIVEL = `(d.status = 'com_cliente' OR d.ajuste_pedido OR (d.status IN ('aprovado','trafego') AND d.aprovado_em > NOW() - INTERVAL '60 days'))`;
+const VISIVEL = `(NOT d.avulso AND d.status = 'com_cliente' OR d.ajuste_pedido OR (d.status IN ('aprovado','trafego') AND d.aprovado_em > NOW() - INTERVAL '60 days'))`;
 
 export async function gcAprovacaoPublicaRoutes(app: FastifyInstance) {
   app.get<{ Params: { token: string } }>('/api/public/cliente/:token/artes', async (req, reply) => {

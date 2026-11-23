@@ -1,4 +1,4 @@
-import type { GcSocialAnexo, GcSocialProducao, GcSocialStatus } from '@/services/gestaoClientes'
+import { gestaoClientes, type GcSocialAnexo, type GcSocialProducao, type GcSocialStatus } from '@/services/gestaoClientes'
 
 /** As 6 etapas do fluxo de criação, na ordem do quadro. */
 export const ETAPAS_ARTE: { valor: GcSocialStatus; titulo: string; ajuda: string; cor: string }[] = [
@@ -40,6 +40,62 @@ export function opcoesDeMes(extra: string[] = []): { value: string; label: strin
 }
 
 export const MAX_BYTES = 5 * 1024 * 1024
+export const MAX_VIDEO_BYTES = 100 * 1024 * 1024
+
+/** A miniatura do card: a primeira imagem da arte final ou, num Reels, a capa do vídeo. */
+export const capaDoCard = (p: Pick<GcSocialProducao, 'anexos'>): string =>
+  imagensFinais(p)[0]?.dataUrl || midiasFinais(p).find((a) => a.type.startsWith('video/') && a.capa)?.capa || ''
+export const videoDoCard = (p: Pick<GcSocialProducao, 'anexos'>) => midiasFinais(p).find((a) => a.type.startsWith('video/'))
+
+/** O quadro que o vídeo está mostrando agora, como JPG (data URL). */
+export function quadroDoVideo(v: HTMLVideoElement): string {
+  const escala = Math.min(1, 1080 / (v.videoWidth || 1080))
+  const c = document.createElement('canvas')
+  c.width = Math.round((v.videoWidth || 1080) * escala)
+  c.height = Math.round((v.videoHeight || 1920) * escala)
+  c.getContext('2d')!.drawImage(v, 0, 0, c.width, c.height)
+  return c.toDataURL('image/jpeg', 0.9)
+}
+
+/** Capa automática: o quadro de ~0,5s do vídeo (null se o navegador não conseguir ler o formato). */
+function capaAutomatica(arquivo: File): Promise<string | null> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(arquivo)
+    const v = document.createElement('video')
+    const fim = (r: string | null) => {
+      URL.revokeObjectURL(url)
+      resolve(r)
+    }
+    const limite = window.setTimeout(() => fim(null), 15_000)
+    v.muted = true
+    v.preload = 'auto'
+    v.onerror = () => { window.clearTimeout(limite); fim(null) }
+    v.onloadedmetadata = () => { v.currentTime = Math.min(0.5, (v.duration || 1) / 2) }
+    v.onseeked = () => {
+      window.clearTimeout(limite)
+      try { fim(quadroDoVideo(v)) } catch { fim(null) }
+    }
+    v.src = url
+  })
+}
+
+/**
+ * Anexa imagem (até 5MB, vai no card) ou vídeo (até 100MB, vai à parte) e devolve o card atualizado.
+ * O vídeo já sai com uma capa automática; dá pra trocar depois em "Capa do Reels".
+ */
+export async function anexarMidia(cardId: string, arquivo: File, papel: 'final' | 'referencia' = 'final'): Promise<GcSocialProducao> {
+  if (arquivo.type.startsWith('video/')) {
+    if (arquivo.size > MAX_VIDEO_BYTES) throw new Error(`"${arquivo.name}" passa de 100MB`)
+    let card = await gestaoClientes.anexarVideo(cardId, arquivo, papel)
+    const capa = await capaAutomatica(arquivo)
+    const anexo = card.anexos?.[card.anexos.length - 1]
+    if (capa && anexo) card = await gestaoClientes.definirCapaDoAnexo(cardId, anexo.id, capa).catch(() => card)
+    return card
+  }
+  if (arquivo.size > MAX_BYTES) throw new Error(`"${arquivo.name}" passa de 5MB — use um link do Drive pra arquivos grandes`)
+  const { name, type, size, dataUrl } = await lerArquivo(arquivo)
+  return gestaoClientes.anexarNaProducao(cardId, { name, type, size, dataUrl, papel })
+}
 
 export function lerArquivo(arquivo: File): Promise<{ id: string; name: string; type: string; size: number; dataUrl: string }> {
   return new Promise((resolve, reject) => {

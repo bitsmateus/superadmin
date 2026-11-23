@@ -1,9 +1,10 @@
 import * as React from 'react'
-import { ArrowLeftRight, FileText, ImagePlus, Paperclip, Plus, Sparkles, X } from 'lucide-react'
+import { ArrowLeftRight, FileText, Film, ImagePlus, Paperclip, Plus, Sparkles, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/Button'
-import { gestaoClientes, type GcSocialProducao } from '@/services/gestaoClientes'
-import { MAX_BYTES, ehFinal, lerArquivo } from '@/lib/socialArtes'
+import { gestaoClientes, type GcSocialAnexo, type GcSocialProducao } from '@/services/gestaoClientes'
+import { anexarMidia, ehFinal } from '@/lib/socialArtes'
+import { CapaDoReels } from './CapaDoReels'
 import { cn } from '@/lib/utils'
 
 /**
@@ -23,6 +24,7 @@ export function AnexosDoCard({ demanda, papel, onMudou, colarAqui }: {
   const [enviando, setEnviando] = React.useState(false)
   const [ampliada, setAmpliada] = React.useState<string | null>(null)
   const [arrastando, setArrastando] = React.useState(false)
+  const [capaDe, setCapaDe] = React.useState<GcSocialAnexo | null>(null)
   const input = React.useRef<HTMLInputElement>(null)
   const anexos = (demanda.anexos ?? []).filter((a) => (papel === 'final' ? ehFinal(a) : !ehFinal(a)))
   const final = papel === 'final'
@@ -33,12 +35,11 @@ export function AnexosDoCard({ demanda, papel, onMudou, colarAqui }: {
     try {
       let atual: GcSocialProducao | null = null
       for (const arquivo of arquivos) {
-        if (arquivo.size > MAX_BYTES) {
-          toast.error(`"${arquivo.name}" passa de 5MB — use um link do Drive pra arquivos grandes`)
-          continue
+        try {
+          atual = await anexarMidia(demanda.id, arquivo, papel)
+        } catch (err) {
+          toast.error((err as Error).message)
         }
-        const { name, type, size, dataUrl } = await lerArquivo(arquivo)
-        atual = await gestaoClientes.anexarNaProducao(demanda.id, { name, type, size, dataUrl, papel })
       }
       if (atual) {
         onMudou(atual)
@@ -141,6 +142,11 @@ export function AnexosDoCard({ demanda, papel, onMudou, colarAqui }: {
                 <button type="button" onClick={() => setAmpliada(a.dataUrl)} className="block w-full" title={a.name}>
                   <img src={a.dataUrl} alt={a.name} className={cn('w-full object-cover', final ? 'h-36' : 'h-20')} />
                 </button>
+              ) : a.type.startsWith('video/') && a.videoId ? (
+                <button type="button" onClick={() => setCapaDe(a)} className="relative block w-full bg-black" title="Ver o vídeo e escolher a capa do Reels">
+                  {a.capa ? <img src={a.capa} alt={a.name} className={cn('w-full object-cover', final ? 'h-36' : 'h-20')} /> : <span className={cn('flex w-full items-center justify-center text-white/50', final ? 'h-36' : 'h-20')}><Film className="h-6 w-6" /></span>}
+                  <span className="absolute bottom-1 left-1 flex items-center gap-1 rounded bg-black/60 px-1.5 text-[10px] text-white"><Film className="h-3 w-3" /> Reels · {(a.size / 1048576).toFixed(1)}MB</span>
+                </button>
               ) : a.type.startsWith('video/') ? (
                 <video src={a.dataUrl} className={cn('w-full bg-black object-cover', final ? 'h-36' : 'h-20')} muted controls={final} />
               ) : (
@@ -150,6 +156,11 @@ export function AnexosDoCard({ demanda, papel, onMudou, colarAqui }: {
                 </a>
               )}
               <div className="absolute right-1 top-1 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100 max-sm:opacity-100">
+                {final && a.type.startsWith('video/') && (
+                  <button type="button" onClick={() => setCapaDe(a)} className="rounded-md bg-black/55 p-1 text-white hover:bg-accent" aria-label="Capa do Reels" title="Capa do Reels">
+                    <ImagePlus className="h-3 w-3" />
+                  </button>
+                )}
                 {/^(image|video)\//.test(a.type) && (
                   <button
                     type="button"
@@ -174,6 +185,7 @@ export function AnexosDoCard({ demanda, papel, onMudou, colarAqui }: {
           ))}
         </div>
       )}
+      <CapaDoReels aberto={!!capaDe} onFechar={() => setCapaDe(null)} demanda={demanda} video={capaDe ? (demanda.anexos ?? []).find((x) => x.id === capaDe.id) ?? capaDe : undefined} onMudou={onMudou} />
       {ampliada && (
         <button
           type="button"

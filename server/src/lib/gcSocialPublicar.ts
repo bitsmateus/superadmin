@@ -21,14 +21,14 @@ const GRAPH = `https://graph.facebook.com/${VERSION}`;
 export type RedeSocial = 'instagram' | 'facebook';
 export type FormatoPost = 'feed' | 'reels' | 'story';
 
-interface Anexo { id: string; name: string; type: string; dataUrl: string; papel?: string }
+interface Anexo { id: string; name: string; type: string; dataUrl: string; papel?: string; videoId?: string; capa?: string }
 
 interface Agendamento {
   id: string; gc_cliente_id: string; gc_producao_id: string; redes: RedeSocial[]; formato: FormatoPost;
   legenda: string; midia_token: string; base_url: string;
 }
 
-interface Midia { url: string; video: boolean }
+interface Midia { url: string; video: boolean; capa?: string }
 
 interface ResultadoRede { ok: boolean; link?: string; id?: string; erro?: string }
 
@@ -109,7 +109,8 @@ async function publicarInstagram(igUserId: string, token: string, formato: Forma
   } else if (formato === 'reels' || (midias.length === 1 && midias[0].video)) {
     const video = midias.find((m) => m.video);
     if (!video) throw new Error('Reels precisa de um vídeo anexado.');
-    const c = await criar({ media_type: 'REELS', video_url: video.url, caption: legenda });
+    // cover_url = a capa escolhida na tela (imagem 9:16); sem ela o Instagram usa o primeiro quadro.
+    const c = await criar({ media_type: 'REELS', video_url: video.url, caption: legenda, ...(video.capa ? { cover_url: video.capa } : {}) });
     mediaIds = [await publicar(c.id)];
   } else if (midias.length === 1) {
     const c = await criar({ image_url: midias[0].url, caption: legenda });
@@ -167,7 +168,11 @@ async function midiasDoAgendamento(ag: Agendamento): Promise<Midia[]> {
     .filter((a) => a.papel !== 'referencia' && /^(image|video)\//.test(a.type))
     .map((a) => {
       const video = a.type.startsWith('video/');
-      return { video, url: `${base}/api/public/social-midia/${ag.midia_token}/${a.id}.${video ? 'mp4' : 'jpg'}` };
+      return {
+        video,
+        url: `${base}/api/public/social-midia/${ag.midia_token}/${a.id}.${video ? 'mp4' : 'jpg'}`,
+        ...(video && a.capa ? { capa: `${base}/api/public/social-midia/${ag.midia_token}/${a.id}-capa.jpg` } : {}),
+      };
     });
 }
 
@@ -209,7 +214,7 @@ export async function publicarAgendamento(id: string): Promise<void> {
   if (algumOk) {
     await query(
       `UPDATE gc_social_producao SET status = 'trafego', trafego_em = COALESCE(trafego_em, NOW()), updated_at = NOW()
-       WHERE id = $1 AND status <> 'trafego'`,
+       WHERE id = $1 AND status <> 'trafego' AND NOT avulso`,
       [ag.gc_producao_id],
     );
   }
@@ -218,14 +223,28 @@ export async function publicarAgendamento(id: string): Promise<void> {
 /** A mídia pública de um agendamento (o que a Meta baixa). Imagem sai sempre em JPG. */
 export async function midiaPublica(token: string, arquivo: string): Promise<{ tipo: string; corpo: Buffer } | null> {
   if (!/^[a-f0-9]{48}$/.test(token)) return null;
-  const anexoId = arquivo.replace(/\.(jpg|mp4)$/i, '');
-  const r = await queryOne<{ anexos: Anexo[] }>(
-    `SELECT p.anexos FROM gc_social_agendamentos a JOIN gc_social_producao p ON p.id = a.gc_producao_id
+  const ehCapa = /-capa\.jpg$/i.test(arquivo);
+  const anexoId = arquivo.replace(/-capa\.jpg$/i, '').replace(/\.(jpg|mp4)$/i, '');
+  const r = await queryOne<{ anexos: Anexo[]; producao_id: string }>(
+    `SELECT p.anexos, p.id AS producao_id FROM gc_social_agendamentos a JOIN gc_social_producao p ON p.id = a.gc_producao_id
      WHERE a.midia_token = $1
        AND (a.status IN ('agendado','publicando') OR (a.status IN ('publicado','erro') AND a.updated_at > NOW() - INTERVAL '2 days'))`,
     [token],
   );
   const anexo = r?.anexos?.find((a) => a.id === anexoId);
+  if (anexo && ehCapa) {
+    // Capa do Reels: sempre 9:16 (1080x1920), recortando do centro.
+    const c = anexo.capa?.match(/^data:image\/[\w.+-]+;base64,(.*)$/s);
+    if (!c) return null;
+    return { tipo: 'image/jpeg', corpo: await sharp(Buffer.from(c[1], 'base64')).resize(1080, 1920, { fit: 'cover' }).jpeg({ quality: 90 }).toBuffer() };
+  }
+  if (anexo?.videoId && r) {
+    const v = await queryOne<{ tipo: string; dados: Buffer }>(
+      'SELECT tipo, dados FROM gc_social_videos WHERE id::text = $1 AND gc_producao_id = $2',
+      [anexo.videoId, r.producao_id],
+    );
+    return v ? { tipo: v.tipo, corpo: Buffer.from(v.dados) } : null;
+  }
   const m = anexo?.dataUrl.match(/^data:([\w.+-]+\/[\w.+-]+);base64,(.*)$/s);
   if (!anexo || !m) return null;
   const bruto = Buffer.from(m[2], 'base64');

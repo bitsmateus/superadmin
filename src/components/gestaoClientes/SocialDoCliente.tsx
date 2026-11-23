@@ -14,11 +14,12 @@ import { useTeamProfiles } from '@/hooks/useTeamProfiles'
 import { useKanbanSensors } from '@/hooks/useKanbanSensors'
 import { gestaoClientes, type GcSocialMaterial, type GcSocialProducao, type GcSocialStatus } from '@/services/gestaoClientes'
 import {
-  ETAPAS_ARTE, MAX_BYTES, copiar, enderecoDoPortal, imagensFinais, lerArquivo, mesDeHoje, nomeDoMes, opcoesDeMes, somarMes,
+  ETAPAS_ARTE, MAX_BYTES, anexarMidia, capaDoCard, copiar, enderecoDoPortal, imagensFinais, lerArquivo, mesDeHoje, nomeDoMes, opcoesDeMes, somarMes,
 } from '@/lib/socialArtes'
 import { cn } from '@/lib/utils'
 import { DetalheDaArte } from './social/DetalheDaArte'
 import { ModalPostarTodas } from './social/ModalPostarTodas'
+import { ModalPostarAvulso } from './social/ModalPostarAvulso'
 import { ChecklistSocialDoCliente } from './ChecklistSocial'
 
 const dataBr = (iso: string) => iso.slice(0, 10).split('-').reverse().join('/')
@@ -124,7 +125,7 @@ function CartaoProducao({ p, onAbrir, onExcluir, sobreposto }: {
   const fechada = p.status === 'aprovado' || p.status === 'trafego'
   const atrasada = p.prazo && p.prazo < hojeISO() && !fechada && p.status !== 'com_cliente'
   const resumo = resumoDaArte(p.descricao)
-  const capa = imagensFinais(p)[0]
+  const capa = capaDoCard(p)
   const nFinais = imagensFinais(p).length
   return (
     <div
@@ -140,7 +141,7 @@ function CartaoProducao({ p, onAbrir, onExcluir, sobreposto }: {
     >
       {capa && (
         <div className="relative">
-          <img src={capa.dataUrl} alt="" className="h-24 w-full object-cover" />
+          <img src={capa} alt="" className="h-24 w-full object-cover" />
           {nFinais > 1 && <span className="absolute bottom-1 right-1 rounded bg-black/60 px-1.5 text-[10px] text-white">{nFinais} imagens</span>}
         </div>
       )}
@@ -539,10 +540,10 @@ function ModalEnviarAprovacao({ aberto, onFechar, clienteId, demandas, onMudou }
             <p className="mb-1.5 text-xs font-semibold text-foreground/70">Já aprovadas neste mês ({aprovadas.length}) · aparecem no portal como aprovadas</p>
             <ul className="space-y-1.5">
               {aprovadas.map((d) => {
-                const capa = imagensFinais(d)[0]
+                const capa = capaDoCard(d)
                 return (
                   <li key={d.id} className="flex items-center gap-3 rounded-xl border border-line p-2 opacity-80">
-                    {capa ? <img src={capa.dataUrl} alt="" className="h-10 w-9 shrink-0 rounded-md object-cover" /> : <span className="h-10 w-9 shrink-0 rounded-md bg-elevate/[0.06]" />}
+                    {capa ? <img src={capa} alt="" className="h-10 w-9 shrink-0 rounded-md object-cover" /> : <span className="h-10 w-9 shrink-0 rounded-md bg-elevate/[0.06]" />}
                     <span className="min-w-0 flex-1 truncate text-sm text-foreground">{d.titulo}</span>
                     <span className="shrink-0 text-[11px] text-success">✓ {d.aprovado_por || 'Aprovada'} · {etapa(d)}</span>
                   </li>
@@ -637,6 +638,7 @@ export function SocialDoCliente({ clienteId }: { clienteId: string }) {
   const [pdfAberto, setPdfAberto] = React.useState(false)
   const [aprovacaoAberta, setAprovacaoAberta] = React.useState(false)
   const [postarAberto, setPostarAberto] = React.useState(false)
+  const [avulsoAberto, setAvulsoAberto] = React.useState(false)
   const doMes = (m: string | null) => (m ? producao.filter((p) => p.mes === m) : producao)
   const producaoNoPeriodo = doMes(mes)
   const rotuloPeriodo = mes ? nomeDoMes(mes) : ''
@@ -690,16 +692,17 @@ export function SocialDoCliente({ clienteId }: { clienteId: string }) {
     let feitas = 0
     try {
       for (const arquivo of midias) {
-        if (arquivo.size > MAX_BYTES) {
-          toast.error(`"${arquivo.name}" passa de 5MB`)
-          continue
-        }
         if (midias.length > 1) toast.loading(`Subindo ${feitas + 1} de ${midias.length}…`, { id: t })
         const titulo = `Arte: ${arquivo.name.replace(/\.\w+$/, '').replace(/[-_]+/g, ' ').trim() || 'imagem'}`
         const criado = await gestaoClientes.criarSocialProducao(clienteId, { titulo, status, mes: mes ?? mesDeHoje() })
-        const { name, type, size, dataUrl } = await lerArquivo(arquivo)
-        await gestaoClientes.anexarNaProducao(criado.id, { name, type, size, dataUrl, papel: 'final' })
-        feitas++
+        try {
+          await anexarMidia(criado.id, arquivo, 'final')
+          feitas++
+        } catch (err) {
+          // Não deixa card vazio pra trás quando o arquivo não subiu (grande demais, formato ruim...).
+          await gestaoClientes.excluirSocialProducao(criado.id).catch(() => undefined)
+          toast.error((err as Error).message)
+        }
       }
       await carregar()
       toast.success(feitas === 1 ? '1 card criado' : `${feitas} cards criados, um por arquivo`, { id: t })
@@ -815,6 +818,9 @@ export function SocialDoCliente({ clienteId }: { clienteId: string }) {
             )}
           </div>
           <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="secondary" leftIcon={<Send className="h-4 w-4" />} onClick={() => setAvulsoAberto(true)} title="Subir imagens/vídeos e postar direto, sem passar por No tráfego">
+              Postar avulso
+            </Button>
             <Button size="sm" variant="secondary" leftIcon={<FileDown className="h-4 w-4" />} onClick={() => setPdfAberto(true)}>
               Gerar PDF das artes
             </Button>
@@ -1077,6 +1083,7 @@ export function SocialDoCliente({ clienteId }: { clienteId: string }) {
 
       <ModalPdfArtes aberto={pdfAberto} onFechar={() => setPdfAberto(false)} clienteId={clienteId} demandas={producaoNoPeriodo} periodo={rotuloPeriodo} onMudou={() => void carregar()} />
       <ModalEnviarAprovacao aberto={aprovacaoAberta} onFechar={() => setAprovacaoAberta(false)} clienteId={clienteId} demandas={producaoNoPeriodo} onMudou={() => void carregar()} />
+      <ModalPostarAvulso aberto={avulsoAberto} onFechar={() => setAvulsoAberto(false)} clienteId={clienteId} />
       <ModalPostarTodas aberto={postarAberto} onFechar={() => setPostarAberto(false)} clienteId={clienteId} cards={noTrafego} mes={mes} onMudou={() => void carregar()} />
 
       <Modal open={!!ampliado} onClose={() => setAmpliado(null)} size="2xl" title={ampliado?.titulo}>

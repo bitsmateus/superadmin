@@ -13,6 +13,7 @@ import {
 import { ETAPAS_ARTE, copiar, enderecoDoPortal, imagensFinais, midiasFinais, nomeDoMes, opcoesDeMes } from '@/lib/socialArtes'
 import { cn } from '@/lib/utils'
 import { AnexosDoCard } from './AnexosDoCard'
+import { CapaDoReels } from './CapaDoReels'
 
 const dataBr = (iso: string) => iso.slice(0, 10).split('-').reverse().join('/')
 const dataHoraCurta = (iso: string) =>
@@ -244,6 +245,8 @@ function PublicacaoDoCard({ demanda, onMudou }: { demanda: GcSocialProducao; onM
   const [legenda, setLegenda] = React.useState('')
   const midias = midiasFinais(demanda)
   const temMidia = midias.length > 0
+  const video = midias.find((a) => a.type.startsWith('video/'))
+  const [capaAberta, setCapaAberta] = React.useState(false)
 
   const abrirForm = () => {
     const proxima = new Date(Date.now() + 60 * 60_000)
@@ -298,6 +301,7 @@ function PublicacaoDoCard({ demanda, onMudou }: { demanda: GcSocialProducao; onM
 
   return (
     <div className="rounded-xl border border-line p-3">
+      <CapaDoReels aberto={capaAberta} onFechar={() => setCapaAberta(false)} demanda={demanda} video={video} onMudou={onMudou} />
       <div className="mb-2 flex items-center justify-between gap-2">
         <p className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
           <Send className="h-4 w-4 text-accent" /> Publicação
@@ -379,6 +383,18 @@ function PublicacaoDoCard({ demanda, onMudou }: { demanda: GcSocialProducao; onM
               />
             </div>
           </div>
+          {formato === 'reels' && video && (
+            <div className="flex items-center gap-3 rounded-lg border border-line p-2">
+              {video.capa
+                ? <img src={video.capa} alt="Capa do Reels" className="aspect-[9/16] w-14 rounded-md object-cover" />
+                : <span className="flex aspect-[9/16] w-14 items-center justify-center rounded-md bg-black text-[10px] text-white/60">Sem capa</span>}
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium text-foreground/80">Capa do Reels</p>
+                <p className="text-[11px] text-foreground/45">{video.capa ? 'Vai como capa no Instagram.' : 'Sem capa escolhida: o Instagram usa o primeiro quadro.'}</p>
+              </div>
+              <Button size="sm" variant="secondary" onClick={() => setCapaAberta(true)}>{video.capa ? 'Trocar capa' : 'Escolher capa'}</Button>
+            </div>
+          )}
           {formato !== 'story' && (
             <div>
               <div className="mb-1 flex items-center justify-between">

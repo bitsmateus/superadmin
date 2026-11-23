@@ -4,9 +4,10 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { gestaoClientes, type GcRedeSocial, type GcSocialAgendamento, type GcSocialProducao } from '@/services/gestaoClientes'
-import { MAX_BYTES, lerArquivo, midiasFinais } from '@/lib/socialArtes'
+import { anexarMidia, midiasFinais, videoDoCard } from '@/lib/socialArtes'
 import { cn } from '@/lib/utils'
 import { campoDataHora, legendaDosDetalhes } from './DetalheDaArte'
+import { CapaDoReels } from './CapaDoReels'
 
 /**
  * "Postar todas": agenda de uma vez os posts das artes que estão em "No tráfego". Mostra todos os
@@ -54,6 +55,7 @@ export function ModalPostarTodas({ aberto, onFechar, clienteId, cards, mes, onMu
   const [postando, setPostando] = React.useState(false)
   const [adicionando, setAdicionando] = React.useState(false)
   const input = React.useRef<HTMLInputElement>(null)
+  const [capaDe, setCapaDe] = React.useState<string | null>(null)
 
   // Ao abrir: entram as artes com mídia que ainda não estão agendadas nem publicadas.
   React.useEffect(() => {
@@ -98,15 +100,17 @@ export function ModalPostarTodas({ aberto, onFechar, clienteId, cards, mes, onMu
     try {
       const novos: Item[] = []
       for (const arquivo of arquivos) {
-        if (arquivo.size > MAX_BYTES) {
-          toast.error(`"${arquivo.name}" passa de 5MB`)
-          continue
-        }
         const titulo = `Post: ${arquivo.name.replace(/\.\w+$/, '').replace(/[-_]+/g, ' ').trim() || 'imagem'}`
         const criado = await gestaoClientes.criarSocialProducao(clienteId, { titulo, status: 'trafego', ...(mes ? { mes } : {}) })
-        const { name, type, size, dataUrl } = await lerArquivo(arquivo)
-        const card = await gestaoClientes.anexarNaProducao(criado.id, { name, type, size, dataUrl, papel: 'final' })
-        novos.push({ card, quando: '', legenda: '', formato: type.startsWith('video/') ? 'reels' : 'feed', gerando: false })
+        let card: GcSocialProducao
+        try {
+          card = await anexarMidia(criado.id, arquivo, 'final')
+        } catch (err) {
+          await gestaoClientes.excluirSocialProducao(criado.id).catch(() => undefined)
+          toast.error((err as Error).message)
+          continue
+        }
+        novos.push({ card, quando: '', legenda: '', formato: arquivo.type.startsWith('video/') ? 'reels' : 'feed', gerando: false })
       }
       if (novos.length) {
         setItens((l) => {
@@ -254,7 +258,11 @@ export function ModalPostarTodas({ aberto, onFechar, clienteId, cards, mes, onMu
                   <div className="flex gap-3 max-sm:flex-col">
                     <div className="flex shrink-0 gap-1">
                       {midias.slice(0, 3).map((a) => (a.type.startsWith('video/')
-                        ? <video key={a.id} src={a.dataUrl} muted className="h-28 w-24 rounded-lg bg-black object-cover" />
+                        ? (a.videoId
+                          ? (a.capa
+                            ? <img key={a.id} src={a.capa} alt="" className="h-28 w-24 rounded-lg object-cover" />
+                            : <span key={a.id} className="flex h-28 w-24 items-center justify-center rounded-lg bg-black text-xs text-white/60">Vídeo</span>)
+                          : <video key={a.id} src={a.dataUrl} muted className="h-28 w-24 rounded-lg bg-black object-cover" />)
                         : <img key={a.id} src={a.dataUrl} alt="" className="h-28 w-24 rounded-lg object-cover" />))}
                       {midias.length > 3 && <span className="flex h-28 w-8 items-center justify-center text-xs text-foreground/45">+{midias.length - 3}</span>}
                     </div>
@@ -290,6 +298,11 @@ export function ModalPostarTodas({ aberto, onFechar, clienteId, cards, mes, onMu
                           <option value="reels" disabled={!ehVideo(it.card)}>Reels</option>
                           <option value="story">Story</option>
                         </select>
+                        {it.formato === 'reels' && videoDoCard(it.card) && (
+                          <Button size="sm" variant="secondary" onClick={() => setCapaDe(it.card.id)}>
+                            {videoDoCard(it.card)?.capa ? 'Trocar capa' : 'Escolher capa'}
+                          </Button>
+                        )}
                         {it.formato !== 'story' && (
                           <Button
                             size="sm"
@@ -322,6 +335,18 @@ export function ModalPostarTodas({ aberto, onFechar, clienteId, cards, mes, onMu
             })}
           </ul>
         )}
+        {(() => {
+          const alvo = itens.find((x) => x.card.id === capaDe)
+          return (
+            <CapaDoReels
+              aberto={!!alvo}
+              onFechar={() => setCapaDe(null)}
+              demanda={alvo?.card ?? ({} as GcSocialProducao)}
+              video={alvo ? videoDoCard(alvo.card) : undefined}
+              onMudou={(card) => { mudar(card.id, { card }); onMudou() }}
+            />
+          )
+        })()}
         {postando && <p className="flex items-center gap-1.5 text-xs text-foreground/55"><Loader2 className="h-3 w-3 animate-spin" /> Agendando…</p>}
       </div>
     </Modal>

@@ -2405,7 +2405,7 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
                      SELECT 1 FROM gc_social_agendamentos s WHERE s.gc_producao_id = p.id AND s.status IN ('agendado','publicando'))),
                  'publicadas', count(*) FILTER (WHERE EXISTS (
                      SELECT 1 FROM gc_social_agendamentos s WHERE s.gc_producao_id = p.id AND s.status = 'publicado')))
-               FROM gc_social_producao p WHERE p.gc_cliente_id = c.id AND p.mes = $1) AS artes
+               FROM gc_social_producao p WHERE p.gc_cliente_id = c.id AND p.mes = $1 AND NOT p.avulso) AS artes
        FROM gc_clientes c
        LEFT JOIN profiles g ON g.id = c.gestor_trafego_id
        LEFT JOIN profiles r ON r.id = c.responsavel_id
@@ -2526,17 +2526,22 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
     return query(
       `SELECT c.id, c.nome_empresa, c.logo_url, c.segmento, c.status,
               (SELECT count(*) FROM gc_social_materiais m WHERE m.gc_cliente_id = c.id)::int AS materiais,
-              (SELECT count(*) FROM gc_social_producao p WHERE p.gc_cliente_id = c.id AND p.status = 'para_producao')::int AS para_producao,
-              (SELECT count(*) FROM gc_social_producao p WHERE p.gc_cliente_id = c.id AND p.status = 'em_producao')::int AS em_producao,
-              (SELECT count(*) FROM gc_social_producao p WHERE p.gc_cliente_id = c.id AND p.status IN ('revisao','com_cliente'))::int AS em_aprovacao,
-              (SELECT count(*) FROM gc_social_producao p WHERE p.gc_cliente_id = c.id AND p.status IN ('aprovado','trafego'))::int AS prontas,
-              (SELECT count(*) FROM gc_social_producao p WHERE p.gc_cliente_id = c.id AND p.ajuste_pedido)::int AS ajustes,
+              (SELECT count(*) FROM gc_social_producao p WHERE p.gc_cliente_id = c.id AND NOT p.avulso AND p.status = 'para_producao')::int AS para_producao,
+              (SELECT count(*) FROM gc_social_producao p WHERE p.gc_cliente_id = c.id AND NOT p.avulso AND p.status = 'em_producao')::int AS em_producao,
+              (SELECT count(*) FROM gc_social_producao p WHERE p.gc_cliente_id = c.id AND NOT p.avulso AND p.status IN ('revisao','com_cliente'))::int AS em_aprovacao,
+              (SELECT count(*) FROM gc_social_producao p WHERE p.gc_cliente_id = c.id AND NOT p.avulso AND p.status IN ('aprovado','trafego'))::int AS prontas,
+              (SELECT count(*) FROM gc_social_producao p WHERE p.gc_cliente_id = c.id AND NOT p.avulso AND p.ajuste_pedido)::int AS ajustes,
               COALESCE((SELECT array_agg(DISTINCT pr.name) FROM gc_social_producao p JOIN profiles pr ON pr.id = p.editor_id
                         WHERE p.gc_cliente_id = c.id AND p.status = 'em_producao'), '{}') AS editores
        FROM gc_clientes c
        WHERE c.status <> 'encerrado' AND ${sqlSoDoGestor(req.user as UsuarioGc)}
        ORDER BY c.nome_empresa`
     );
+  });
+
+  // Posts avulsos do cliente (os mais recentes): o que foi agendado/publicado pelo botão "Postar avulso".
+  app.get<{ Params: { id: string } }>('/api/gc/clientes/:id/social/avulsos', autenticado, async (req) => {
+    return query(`${SELECT_PRODUCAO} WHERE d.gc_cliente_id = $1 AND d.avulso ORDER BY d.created_at DESC LIMIT 40`, [req.params.id]);
   });
 
   app.get<{ Params: { id: string } }>('/api/gc/clientes/:id/social', autenticado, async (req) => {
@@ -2546,7 +2551,7 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
        WHERE m.gc_cliente_id = $1 ORDER BY m.created_at DESC`,
       [req.params.id]
     );
-    const producao = await query(`${SELECT_PRODUCAO} WHERE d.gc_cliente_id = $1 ORDER BY d.created_at DESC`, [req.params.id]);
+    const producao = await query(`${SELECT_PRODUCAO} WHERE d.gc_cliente_id = $1 AND NOT d.avulso ORDER BY d.created_at DESC`, [req.params.id]);
     const config = await queryOne<{ gestor_trafego_id: string | null; drive_pasta_artes: string }>(
       'SELECT gestor_trafego_id, drive_pasta_artes FROM gc_clientes WHERE id = $1', [req.params.id]
     );
@@ -2591,7 +2596,7 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
 
   app.post<{
     Params: { id: string };
-    Body: { titulo?: string; descricao?: string; status?: string; editor_id?: string | null; prazo?: string | null; mes?: string };
+    Body: { titulo?: string; descricao?: string; status?: string; editor_id?: string | null; prazo?: string | null; mes?: string; avulso?: boolean };
   }>('/api/gc/clientes/:id/social/producao', autenticado, async (req, reply) => {
     const { sub } = req.user as { sub: string };
     const b = req.body ?? {};
@@ -2599,9 +2604,9 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
     if (!titulo) return reply.status(400).send({ message: 'Dê um título à demanda de produção' });
     const status: Etapa = ehEtapa(b.status) ? b.status : 'para_producao';
     const criado = await queryOne<{ id: string }>(
-      `INSERT INTO gc_social_producao (gc_cliente_id, titulo, descricao, status, editor_id, prazo, criado_por, mes)
-       VALUES ($1,$2,$3,$4,$5,$6,$7, COALESCE($8, to_char(NOW() AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM'))) RETURNING id`,
-      [req.params.id, titulo, String(b.descricao ?? ''), status, b.editor_id || null, b.prazo || null, sub, ehMes(b.mes) ? b.mes : null]
+      `INSERT INTO gc_social_producao (gc_cliente_id, titulo, descricao, status, editor_id, prazo, criado_por, mes, avulso)
+       VALUES ($1,$2,$3,$4,$5,$6,$7, COALESCE($8, to_char(NOW() AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM')), $9) RETURNING id`,
+      [req.params.id, titulo, String(b.descricao ?? ''), status, b.editor_id || null, b.prazo || null, sub, ehMes(b.mes) ? b.mes : null, b.avulso === true]
     );
     const carimbos = carimbosDaEtapa(status);
     if (carimbos.length) await query(`UPDATE gc_social_producao SET ${carimbos.join(', ')} WHERE id = $1`, [criado!.id]);
@@ -2722,6 +2727,78 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
     return reply.header('Content-Type', m.tipo).header('Cache-Control', 'no-store').send(m.corpo);
   });
 
+  // ── Vídeo (Reels) do card ────────────────────────────────────────────────
+  // O vídeo vai como corpo cru (Content-Type video/*), sem base64: até 100MB. Fica em gc_social_videos e o anexo
+  // do card guarda só { videoId, capa }. A tela baixa pra assistir em GET /api/gc/social/video/:id.
+  const MAX_VIDEO = 100 * 1024 * 1024;
+  app.addContentTypeParser(/^video\//, { parseAs: 'buffer', bodyLimit: MAX_VIDEO }, (_req, body, done) => done(null, body));
+
+  app.post<{ Params: { id: string }; Querystring: { nome?: string; papel?: string } }>(
+    '/api/gc/social/producao/:id/video',
+    { ...autenticado, bodyLimit: MAX_VIDEO },
+    async (req, reply) => {
+      const corpo = req.body as Buffer | undefined;
+      if (!Buffer.isBuffer(corpo) || corpo.length < 1024) return reply.status(400).send({ message: 'Vídeo inválido ou vazio' });
+      const tipo = String(req.headers['content-type'] ?? '').split(';')[0].trim().toLowerCase();
+      if (!/^video\/(mp4|quicktime|webm|x-m4v)$/.test(tipo)) return reply.status(400).send({ message: 'Use vídeo MP4 ou MOV (o Instagram não aceita outros).' });
+      const nome = String(req.query.nome ?? 'video.mp4').slice(0, 200);
+      const id = crypto.randomUUID();
+      const card = await queryOne('SELECT id FROM gc_social_producao WHERE id = $1', [req.params.id]);
+      if (!card) return reply.status(404).send({ message: 'Demanda não encontrada' });
+      await query('INSERT INTO gc_social_videos (id, gc_producao_id, nome, tipo, dados) VALUES ($1,$2,$3,$4,$5)', [id, req.params.id, nome, tipo, corpo]);
+      const anexo = { id, name: nome, type: tipo, size: corpo.length, dataUrl: '', papel: req.query.papel === 'referencia' ? 'referencia' : 'final', videoId: id, capa: '' };
+      const r = await queryOne(
+        `UPDATE gc_social_producao SET anexos = anexos || $2::jsonb, updated_at = NOW()
+         WHERE id = $1 AND jsonb_array_length(anexos) < 30 RETURNING id`,
+        [req.params.id, JSON.stringify([anexo])]
+      );
+      if (!r) {
+        await query('DELETE FROM gc_social_videos WHERE id = $1', [id]);
+        return reply.status(404).send({ message: 'Demanda com 30 anexos' });
+      }
+      return queryOne(`${SELECT_PRODUCAO} WHERE d.id = $1`, [req.params.id]);
+    }
+  );
+
+  // GET /api/gc/social/video/:id — o arquivo, com Range (o player precisa pra avançar o vídeo).
+  app.get<{ Params: { id: string } }>('/api/gc/social/video/:id', autenticado, async (req, reply) => {
+    if (!/^[0-9a-f-]{36}$/i.test(req.params.id)) return reply.status(404).send({ message: 'Vídeo não encontrado' });
+    const v = await queryOne<{ tipo: string; dados: Buffer }>('SELECT tipo, dados FROM gc_social_videos WHERE id = $1', [req.params.id]);
+    if (!v) return reply.status(404).send({ message: 'Vídeo não encontrado' });
+    const dados = Buffer.from(v.dados);
+    reply.header('Content-Type', v.tipo).header('Accept-Ranges', 'bytes').header('Cache-Control', 'private, max-age=300');
+    const faixa = /^bytes=(\d*)-(\d*)$/.exec(String(req.headers.range ?? ''));
+    if (faixa && (faixa[1] || faixa[2])) {
+      const ini = faixa[1] ? Number(faixa[1]) : Math.max(0, dados.length - Number(faixa[2]));
+      const fim = faixa[1] && faixa[2] ? Math.min(Number(faixa[2]), dados.length - 1) : dados.length - 1;
+      if (ini > fim || ini >= dados.length) return reply.status(416).header('Content-Range', `bytes */${dados.length}`).send();
+      return reply.status(206).header('Content-Range', `bytes ${ini}-${fim}/${dados.length}`).send(dados.subarray(ini, fim + 1));
+    }
+    return reply.send(dados);
+  });
+
+  // POST /api/gc/social/producao/:id/anexos/:anexo/capa — { dataUrl }: a capa do Reels (imagem; vira 9:16 na saída).
+  app.post<{ Params: { id: string; anexo: string }; Body: { dataUrl?: string } }>(
+    '/api/gc/social/producao/:id/anexos/:anexo/capa',
+    { ...autenticado, bodyLimit: 6 * 1024 * 1024 },
+    async (req, reply) => {
+      const dataUrl = String(req.body?.dataUrl ?? '');
+      if (!/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(dataUrl)) return reply.status(400).send({ message: 'Capa inválida (use JPG ou PNG)' });
+      if (dataUrl.length > 4 * 1024 * 1024) return reply.status(400).send({ message: 'Capa passa de 3MB' });
+      const r = await queryOne(
+        `UPDATE gc_social_producao
+         SET anexos = (SELECT COALESCE(jsonb_agg(CASE WHEN t.a->>'id' = $2 THEN t.a || jsonb_build_object('capa', $3::text) ELSE t.a END
+                                                 ORDER BY t.ord), '[]'::jsonb)
+                       FROM jsonb_array_elements(anexos) WITH ORDINALITY AS t(a, ord)),
+             updated_at = NOW()
+         WHERE id = $1 RETURNING id`,
+        [req.params.id, req.params.anexo, dataUrl]
+      );
+      if (!r) return reply.status(404).send({ message: 'Demanda não encontrada' });
+      return queryOne(`${SELECT_PRODUCAO} WHERE d.id = $1`, [req.params.id]);
+    }
+  );
+
   // POST /api/gc/social/producao/:id/anexos — anexa UM arquivo (imagem de referência da copy). Um por
   // chamada, somado no banco: mandar a lista inteira a cada foto estouraria o limite do corpo.
   app.post<{ Params: { id: string }; Body: { name?: string; type?: string; size?: number; dataUrl?: string; papel?: string } }>(
@@ -2779,6 +2856,7 @@ export async function gestaoClientesRoutes(app: FastifyInstance) {
         [req.params.id, req.params.anexo]
       );
       if (!r) return reply.status(404).send({ message: 'Demanda não encontrada' });
+      await query('DELETE FROM gc_social_videos WHERE id::text = $1 AND gc_producao_id = $2', [req.params.anexo, req.params.id]).catch(() => undefined);
       return queryOne(`${SELECT_PRODUCAO} WHERE d.id = $1`, [req.params.id]);
     }
   );

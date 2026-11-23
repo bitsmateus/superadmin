@@ -559,6 +559,20 @@ const TABELAS = [
   `CREATE INDEX IF NOT EXISTS gc_social_producao_cliente_idx ON gc_social_producao (gc_cliente_id, status)`,
   // Imagens de referência de cada copy/arte: [{ id, name, type, size, dataUrl }], mesmo formato dos anexos das notas.
   `ALTER TABLE gc_social_producao ADD COLUMN IF NOT EXISTS anexos JSONB NOT NULL DEFAULT '[]'`,
+  // Vídeos (Reels) ficam fora do JSON do card: o arquivo é grande e a lista de cards viria pesada. O anexo guarda
+  // só { videoId, capa } — a capa é um JPG pequeno (o quadro escolhido) que também vai de capa do Reels.
+  `CREATE TABLE IF NOT EXISTS gc_social_videos (
+    id UUID PRIMARY KEY,
+    gc_producao_id UUID NOT NULL REFERENCES gc_social_producao(id) ON DELETE CASCADE,
+    nome TEXT NOT NULL DEFAULT '',
+    tipo TEXT NOT NULL DEFAULT 'video/mp4',
+    dados BYTEA NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS gc_social_videos_producao_idx ON gc_social_videos (gc_producao_id)`,
+  // Post avulso: criado pelo botão "Postar avulso" só pra publicar. Não aparece no quadro de produção, nas contagens
+  // nem na aprovação do cliente, e ao publicar NÃO vai pra coluna "No tráfego".
+  `ALTER TABLE gc_social_producao ADD COLUMN IF NOT EXISTS avulso BOOLEAN NOT NULL DEFAULT false`,
   // Postagem agendada de um card (Instagram e/ou página do Facebook). Quem publica é o job
   // gcSocialAgendamentos (a API do Instagram não agenda). midia_token libera as mídias numa URL pública
   // pra Meta baixar; base_url é o endereço da API que a tela usou (a Meta precisa alcançá-lo).

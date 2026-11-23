@@ -73,6 +73,19 @@ export const api = {
   delete: <T = void>(path: string, body?: unknown) =>
     request<T>(path, { method: 'DELETE', ...(body !== undefined ? { body: JSON.stringify(body) } : {}) }),
 
+  /** POST com o arquivo cru no corpo (ex.: vídeo), sem base64. */
+  postRaw: <T>(path: string, corpo: Blob, contentType: string) =>
+    request<T>(path, { method: 'POST', body: corpo, headers: { 'Content-Type': contentType } }),
+
+  /** GET que devolve um arquivo binário (ex.: vídeo do card), com o login. */
+  async getBlob(path: string): Promise<Blob> {
+    const token = getToken()
+    const res = await fetch(`${BASE_URL}${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+    if (res.status === 401 && handleSessionExpired(path)) throw new Error('Sessão expirada — faça login novamente.')
+    if (!res.ok) throw new Error('Não consegui baixar o arquivo')
+    return res.blob()
+  },
+
   /** POST que devolve um arquivo binário (ex.: PDF gerado no servidor) em vez de JSON. */
   async postForBlob(path: string, body?: unknown): Promise<Blob> {
     const token = getToken()

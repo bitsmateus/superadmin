@@ -66,6 +66,11 @@ const DONO_POR_ROTA: { prefixo: string; param: string; sql: string }[] = [
   { prefixo: '/api/gc/social/materiais/:id', param: 'id', sql: 'SELECT gc_cliente_id FROM gc_social_materiais WHERE id = $1' },
   { prefixo: '/api/gc/social/producao/:id', param: 'id', sql: 'SELECT gc_cliente_id FROM gc_social_producao WHERE id = $1' },
   {
+    prefixo: '/api/gc/social/video/:id',
+    param: 'id',
+    sql: 'SELECT p.gc_cliente_id FROM gc_social_videos v JOIN gc_social_producao p ON p.id = v.gc_producao_id WHERE v.id = $1',
+  },
+  {
     prefixo: '/api/gc/social/agendamentos/:id',
     param: 'id',
     sql: 'SELECT p.gc_cliente_id FROM gc_social_agendamentos a JOIN gc_social_producao p ON p.id = a.gc_producao_id WHERE a.id = $1',

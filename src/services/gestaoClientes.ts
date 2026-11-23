@@ -200,6 +200,10 @@ export interface GcSocialResumo {
 /** Anexo de um card: 'final' é a arte pronta (vai pro cliente, PDF, tráfego e postagem); sem papel = final. */
 export interface GcSocialAnexo {
   id: string; name: string; type: string; size: number; dataUrl: string; papel?: 'final' | 'referencia'
+  /** Vídeo guardado à parte no servidor (dataUrl vem vazio). */
+  videoId?: string
+  /** Capa do Reels (imagem, data URL). */
+  capa?: string
 }
 
 export interface GcSocialEvento {
@@ -1207,7 +1211,10 @@ export const gestaoClientes = {
   excluirSocialMaterial: (id: string) => api.delete(`/api/gc/social/materiais/${id}`),
   criarSocialProducao: (clienteId: string, dados: {
     titulo: string; descricao?: string; status?: GcSocialStatus; editor_id?: string | null; prazo?: string | null; mes?: string
+    /** Post avulso: só pra publicar, fora do quadro de produção. */
+    avulso?: boolean
   }) => api.post<GcSocialProducao>(`/api/gc/clientes/${clienteId}/social/producao`, dados),
+  postsAvulsos: (clienteId: string) => api.get<GcSocialProducao[]>(`/api/gc/clientes/${clienteId}/social/avulsos`),
   atualizarSocialProducao: (id: string, dados: Partial<{
     titulo: string; descricao: string; status: GcSocialStatus; editor_id: string | null; prazo: string | null; mes: string
   }>) => api.patch<GcSocialProducao>(`/api/gc/social/producao/${id}`, dados),
@@ -1224,6 +1231,16 @@ export const gestaoClientes = {
     api.postForBlob(`/api/gc/clientes/${clienteId}/social/pdf`, dados),
   anexarNaProducao: (id: string, anexo: { name: string; type: string; size: number; dataUrl: string; papel?: 'final' | 'referencia' }) =>
     api.post<GcSocialProducao>(`/api/gc/social/producao/${id}/anexos`, anexo),
+  /** Vídeo (Reels) até 100MB: vai cru, não em base64. */
+  anexarVideo: (id: string, arquivo: File, papel: 'final' | 'referencia' = 'final') =>
+    api.postRaw<GcSocialProducao>(
+      `/api/gc/social/producao/${id}/video?nome=${encodeURIComponent(arquivo.name)}&papel=${papel}`,
+      arquivo,
+      arquivo.type || 'video/mp4',
+    ),
+  baixarVideo: (videoId: string) => api.getBlob(`/api/gc/social/video/${videoId}`),
+  definirCapaDoAnexo: (id: string, anexoId: string, dataUrl: string) =>
+    api.post<GcSocialProducao>(`/api/gc/social/producao/${id}/anexos/${anexoId}/capa`, { dataUrl }),
   removerAnexoDaProducao: (id: string, anexoId: string) =>
     api.delete<GcSocialProducao>(`/api/gc/social/producao/${id}/anexos/${anexoId}`),
 

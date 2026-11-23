@@ -9,6 +9,7 @@ import { leadLabelsService } from '@/services/leadLabels'
 import { addMonthsToId, currentMonthId, monthIdBounds } from '@/hooks/useMonthFilter'
 import { diaLocal } from '@/lib/diaLocal'
 import { todayKey } from '@/lib/leadDates'
+import { ehTipoSuporteComum } from '@/lib/demandaDoCliente'
 import { cn } from '@/lib/utils'
 import type { LeadBoard, LeadRow } from '@/types/leadBoard'
 
@@ -127,7 +128,8 @@ export function DashboardDoSuporte({ rows, boards, onOpenLead }: { rows: LeadRow
       if (noPeriodo(diaLocal(r.createdAt))) per.entraram.push(r)
       if (fechada && noPeriodo(diaQueEntrou(r))) {
         if (etapa === 'finalizado') per.finalizadas.push(r)
-        else if (etapa === 'entrega') per.entregas.push(r)
+        // SUPORTE COMUM não é entrega: o card que cair no quadro de entregas conta como finalizado, não como entrega feita.
+        else if (etapa === 'entrega') (ehTipoSuporteComum(r.tipo) ? per.finalizadas : per.entregas).push(r)
         else per.vendas.push(r)
         if (etapa !== 'venda' && prazo) (diaQueEntrou(r) <= prazo ? per.noPrazo : per.foraDoPrazo).push(r)
       }

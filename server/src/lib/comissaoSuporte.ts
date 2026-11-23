@@ -9,7 +9,8 @@ import { query } from '../db.js';
  *  - o mês é o do dia em que o card entrou no quadro (entrou_coluna_em), no horário de Brasília;
  *  - o card saiu do quadro de entregas (ou foi excluído) e a comissão ainda está Pendente: o lançamento sai. Já Paga,
  *    fica;
- *  - trocou o Tipo do card com a comissão Pendente: o tipo e o valor são refeitos.
+ *  - trocou o Tipo do card com a comissão Pendente: o tipo e o valor são refeitos;
+ *  - Tipo "SUPORTE COMUM" não é entrega: nunca gera comissão (e, se o card virar SUPORTE COMUM com a comissão Pendente, ela sai).
  * Só conta o que entrou no quadro a partir de COMISSAO_SUPORTE_DESDE (padrão: 01/11/2026), pra não lançar entrega
  * antiga que já foi paga por fora.
  */
@@ -21,6 +22,9 @@ export const normalizar = (s: string) =>
 
 /** "ENTREGAS REALIZADAS", "Entrega" etc. */
 export const ehQuadroDeEntrega = (nomeDoQuadro: string) => normalizar(nomeDoQuadro).includes('entrega');
+
+/** "SUPORTE COMUM": atendimento do dia a dia. Não é entrega: não gera comissão nem conta como entrega feita. */
+export const ehTipoSuporteComum = (tipoDoCard: string) => normalizar(tipoDoCard) === 'suportecomum';
 
 /** Quem recebe, pelo nome da aba ("João" -> "Joao", como a aba Comissões já escreve). */
 export function pessoaDaAba(nomeDaAba: string): string {
@@ -67,6 +71,7 @@ const SELECT_CARD = `
 
 function entregue(c: CardDoSuporte | undefined): c is CardDoSuporte {
   return !!c && !c.deleted_at && !c.is_vendas && !c.venda_origem_id && ehQuadroDeEntrega(c.quadro)
+    && !ehTipoSuporteComum(c.tipo ?? '')
     && !!c.entrou && new Date(c.entrou).getTime() >= new Date(DESDE).getTime();
 }
 

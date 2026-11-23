@@ -2286,6 +2286,20 @@ END; $$`);
     }
   }
 
+  // Tipo "SUPORTE COMUM" nas abas do CRM do suporte (pedido de 23/11): atendimento do dia a dia, que não conta como entrega nem gera
+  // comissão (ver lib/comissaoSuporte.ts). Uma vez só: quem apagar ou renomear depois não o vê voltar. Fica no começo da lista.
+  {
+    const { rows: reservou } = await pool.query(
+      `INSERT INTO traffic_report_log (dia, kind) VALUES ('2026-11-23'::date, 'crm_suporte_tipo_suporte_comum') ON CONFLICT DO NOTHING RETURNING dia`);
+    if (reservou.length) {
+      await pool.query(
+        `INSERT INTO lead_labels (field, name, color, position, page_id)
+         SELECT 'tipo', 'SUPORTE COMUM', '#64748B', 99, lp.id FROM lead_pages lp
+         WHERE lp.no_pipeline AND lp.section = 'demandas' AND lp.archived_at IS NULL
+           AND NOT EXISTS (SELECT 1 FROM lead_labels l WHERE l.field = 'tipo' AND l.page_id = lp.id AND lower(l.name) = 'suporte comum')`);
+    }
+  }
+
   // CRM OUTBOUND (pedido de 11/11): uma aba dentro da tela do CRM ARTHUR, ao lado do CRM IA LUIZA (ver lib/abasJuntas.ts),
   // com os mesmos quadros e etiquetas do CRM ARTHUR, sem nenhum lead — igual ao "Duplicar" das abas. Só na primeira
   // vez: se a aba já existe (mesmo arquivada ou com quadros mexidos), não toca em nada. O quadro de Vendas (is_vendas)

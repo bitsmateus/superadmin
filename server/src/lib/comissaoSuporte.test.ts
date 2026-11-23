@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ehQuadroDeEntrega, lancamentoDaEntrega, mesEmBrasilia, pessoaDaAba, type TipoDeComissao } from './comissaoSuporte.js';
+import { ehQuadroDeEntrega, ehTipoSuporteComum, lancamentoDaEntrega, mesEmBrasilia, pessoaDaAba, type TipoDeComissao } from './comissaoSuporte.js';
 
 const TIPOS: TipoDeComissao[] = [
   { id: 'c', label: 'Entrega API comum', kind: 'fixed', rate_cents: 800 },
@@ -36,4 +36,9 @@ test('ehQuadroDeEntrega e mesEmBrasilia', () => {
   // 01/12 às 01h UTC ainda é 30/11 em Brasília.
   assert.equal(mesEmBrasilia('2026-12-01T01:00:00Z'), '2026-11');
   assert.equal(mesEmBrasilia('2026-12-01T12:00:00Z'), '2026-12');
+});
+
+test('ehTipoSuporteComum: "SUPORTE COMUM" não é entrega (sem ligar pra maiúscula, acento ou espaço); os outros tipos seguem valendo', () => {
+  for (const t of ['SUPORTE COMUM', 'suporte comum', 'Suporte  Comum', 'SUPORTE-COMUM']) assert.equal(ehTipoSuporteComum(t), true, t);
+  for (const t of ['API OFICIAL', 'API COMUM', 'IA BÁSICA', 'API COMUM + IA BÁSICA', 'Configuração', '']) assert.equal(ehTipoSuporteComum(t), false, t);
 });

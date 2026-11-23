@@ -6,6 +6,7 @@ import { Modal } from '@/components/ui/Modal'
 import { Select } from '@/components/ui/Select'
 import { AgendamentoField } from '@/components/comercial/AgendamentoField'
 import { useAuth } from '@/hooks/useAuth'
+import { useClients } from '@/hooks/useClients'
 import { useLeadBoards } from '@/hooks/useLeadBoards'
 import { useLeadLabels } from '@/hooks/useLeadLabels'
 import { useLeadPages } from '@/hooks/useLeadPages'
@@ -14,6 +15,8 @@ import { cn } from '@/lib/utils'
 import { leadBoardsService } from '@/services/leadBoards'
 import { leadLabelsService } from '@/services/leadLabels'
 import { leadNotesService } from '@/services/leadNotes'
+import { db } from '@/services/db'
+import { buscarClientes, descricaoDeOutroOk, textoDaNotaDeDemanda } from '@/lib/demandaDoCliente'
 import type { Client } from '@/types/client'
 import type { LeadBoard } from '@/types/leadBoard'
 
@@ -58,7 +61,19 @@ export function NovaDemandaModal({ board: quadroFixo, onClose, onCriada, cliente
   const pagina = board?.page ?? crmId
   const tipos = useLeadLabels('tipo', pagina)
   const status = useLeadLabels('status', pagina)
+  // A demanda é de um cliente que já existe (escolhido por busca) ou de "Outro" (descrito à mão).
+  const todosClientes = useClients()
+  const listaDeClientes = clientes ?? todosClientes
   const [clienteId, setClienteId] = React.useState('')
+  const [modoCliente, setModoCliente] = React.useState<'cliente' | 'outro'>('cliente')
+  const [busca, setBusca] = React.useState('')
+  const [outro, setOutro] = React.useState('')
+  const clienteEscolhido = listaDeClientes.find((x) => x.id === clienteId)
+  const achados = React.useMemo(
+    () => (clienteEscolhido ? [] : buscarClientes(listaDeClientes, busca)),
+    [listaDeClientes, busca, clienteEscolhido],
+  )
+  const motivoOutro = modoCliente === 'outro' ? descricaoDeOutroOk(outro) : ''
   const [nome, setNome] = React.useState('')
   const [empresa, setEmpresa] = React.useState('')
   const [telefone, setTelefone] = React.useState('')
@@ -77,7 +92,8 @@ export function NovaDemandaModal({ board: quadroFixo, onClose, onCriada, cliente
 
   const escolherCliente = (id: string) => {
     setClienteId(id)
-    const c = clientes?.find((x) => x.id === id)
+    setBusca('')
+    const c = listaDeClientes.find((x) => x.id === id)
     if (!c) return
     setNome(c.name ?? '')
     setEmpresa(c.company ?? '')
@@ -86,6 +102,8 @@ export function NovaDemandaModal({ board: quadroFixo, onClose, onCriada, cliente
 
   const falta = !quadroFixo && !crmId ? 'Escolha o responsável.'
     : !board ? 'O CRM escolhido não tem quadro pra receber a demanda.'
+    : modoCliente === 'cliente' && !clienteEscolhido ? 'Escolha o cliente pela busca, ou marque "Outro" e descreva.'
+    : modoCliente === 'outro' && motivoOutro ? motivoOutro
     : !nome.trim() ? 'Escreva o nome.'
     : !peloGrupo && !telefoneDaDemandaOk(telefone) ? 'Telefone: o número com DDD, ou marque "Grupo" se a demanda veio pelo grupo.'
     : !tipo ? 'Escolha o tipo.'
@@ -106,14 +124,26 @@ export function NovaDemandaModal({ board: quadroFixo, onClose, onCriada, cliente
       status: status.find((l) => mesmoStatus(l.name, board.name))?.name ?? '',
     }
     const texto = demanda.trim()
+    const quem = profile?.name || profile?.email || 'Alguém'
+    // "Outro": a descrição vai na primeira Atualização do card, pra ficar registrado de quem/o que é.
+    const linhas = [
+      ...(modoCliente === 'outro' ? [`Cliente: Outro — ${outro.trim().replace(/\s+/g, ' ')}`] : []),
+      ...(texto ? texto.split(/\n+/) : []),
+    ]
     try {
-      // Com "O que fazer", espera o card existir no banco pra a Atualização poder se ligar a ele.
-      const row = texto
+      // Com Atualização pra escrever, espera o card existir no banco pra ela poder se ligar a ele.
+      const row = linhas.length
         ? await leadBoardsService.createRowAwaited(board.id, dados)
         : leadBoardsService.createRow(board.id, dados)
-      if (texto) {
-        const html = texto.split(/\n+/).map((l) => `<p>${escaparHtml(l)}</p>`).join('')
-        await leadNotesService.addNote(row.id, html, profile?.name || profile?.email || 'Alguém')
+      if (linhas.length) {
+        const html = linhas.map((l) => `<p>${escaparHtml(l)}</p>`).join('')
+        await leadNotesService.addNote(row.id, html, quem)
+      }
+      // Cliente que já existe: a demanda criada também aparece em "Notas internas" dele (quem criou, número ou grupo, tipo, prazo e o que fazer).
+      if (modoCliente === 'cliente' && clienteEscolhido) {
+        db.addInternalNote(clienteEscolhido.id, textoDaNotaDeDemanda({
+          criador: quem, telefone: dados.telefone, pelaGrupo: dados.telefone === 'grupo', tipo, finalizar, demanda: texto,
+        }), quem)
       }
       onCriada?.(row.id, board)
       onClose()
@@ -159,22 +189,79 @@ export function NovaDemandaModal({ board: quadroFixo, onClose, onCriada, cliente
             {board && <p className="mt-1 text-xs text-foreground/45">Entra no CRM dele, em “{board.name}”.</p>}
           </div>
         )}
-        {!quadroFixo && !!clientes?.length && (
-          <Select
-            label="Cliente do Pipeline"
-            value={clienteId}
-            onChange={(e) => escolherCliente(e.target.value)}
-            options={[
-              { value: '', label: 'Nenhum (preencher à mão)' },
-              ...[...clientes]
-                .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
-                .map((c) => ({
-                  value: c.id,
-                  label: c.company?.trim() && c.company.trim() !== c.name ? `${c.name} — ${c.company}` : c.name,
-                })),
-            ]}
-          />
-        )}
+        <div>
+          <p className="mb-1.5 text-xs font-medium text-foreground/70">Cliente *</p>
+          <div className="mb-2 inline-flex overflow-hidden rounded-lg border border-line text-xs font-medium">
+            {([['cliente', 'Cliente'], ['outro', 'Outro']] as const).map(([v, r]) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setModoCliente(v)}
+                className={v === modoCliente ? 'bg-accent/10 px-3 py-1.5 text-accent' : 'px-3 py-1.5 text-foreground/55 hover:bg-elevate/[0.04]'}
+              >
+                {r}
+              </button>
+            ))}
+          </div>
+          {modoCliente === 'cliente' ? (
+            clienteEscolhido ? (
+              <div className="flex items-center justify-between gap-2 rounded-lg border border-accent/30 bg-accent/[0.06] px-3 py-2 text-sm">
+                <span className="min-w-0 truncate font-medium text-foreground">
+                  {clienteEscolhido.name}
+                  {clienteEscolhido.company?.trim() && clienteEscolhido.company.trim() !== clienteEscolhido.name && (
+                    <span className="font-normal text-foreground/55"> — {clienteEscolhido.company}</span>
+                  )}
+                </span>
+                <button type="button" onClick={() => setClienteId('')} className="shrink-0 text-xs text-foreground/50 hover:text-danger">Trocar</button>
+              </div>
+            ) : (
+              <div>
+                <Input
+                  aria-label="Buscar cliente"
+                  value={busca}
+                  onChange={(e) => setBusca(e.target.value)}
+                  placeholder="Buscar por nome, empresa, CNPJ ou telefone…"
+                  autoComplete="off"
+                />
+                {busca.trim().length >= 2 && (
+                  achados.length ? (
+                    <ul className="mt-1.5 max-h-44 overflow-y-auto rounded-lg border border-line bg-card">
+                      {achados.map((c) => (
+                        <li key={c.id}>
+                          <button
+                            type="button"
+                            onClick={() => escolherCliente(c.id)}
+                            className="block w-full px-3 py-2 text-left text-sm hover:bg-elevate/[0.05]"
+                          >
+                            <span className="block truncate font-medium text-foreground">{c.name}</span>
+                            <span className="block truncate text-xs text-foreground/50">
+                              {[c.company?.trim() && c.company.trim() !== c.name ? c.company : '', c.phone, c.cnpj || c.fichaCadastro?.cnpj].filter(Boolean).join(' · ')}
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-1.5 text-xs text-foreground/50">Nenhum cliente encontrado. Se não for cliente, marque “Outro”.</p>
+                  )
+                )}
+              </div>
+            )
+          ) : (
+            <div>
+              <Input
+                aria-label="Descreva o que é"
+                value={outro}
+                onChange={(e) => setOutro(e.target.value)}
+                placeholder="Descreva quem ou o que é (ex.: parceiro, lead novo)…"
+                autoComplete="off"
+              />
+              <p className={cn('mt-1 text-xs', outro.trim() && motivoOutro ? 'text-danger' : 'text-foreground/45')}>
+                {outro.trim() && motivoOutro ? motivoOutro : 'Mínimo de 3 letras, com palavras de verdade.'}
+              </p>
+            </div>
+          )}
+        </div>
         <Input label="Nome *" value={nome} onChange={(e) => setNome(e.target.value)} autoFocus={!!quadroFixo} />
         <Input label="Empresa" value={empresa} onChange={(e) => setEmpresa(e.target.value)} />
         <div>

@@ -270,7 +270,8 @@ export function ModalPostarEmMassa({ tabloides, onFechar }: { tabloides: Tabloid
           dados: { ...grupo[0].dados, formato },
           dados_lista: juntar ? grupo.map((t) => t.dados) : undefined,
           paginas: !varios ? paginasEscolhidas : undefined,
-          capa: capa ?? undefined,
+          // Story: a capa entra uma vez só (no 1º post). Repetida em cada tabloide, saía a mesma story várias vezes.
+          capa: capa && !(formato === 'story' && i > 0) ? capa : undefined,
           formato,
           legenda: formato === 'story' ? '' : texto,
           agendado_para: horarios[i] ? horarios[i]!.toISOString() : null,
@@ -392,7 +393,7 @@ export function ModalPostarEmMassa({ tabloides, onFechar }: { tabloides: Tabloid
               <div className="flex items-center gap-3 rounded-lg border border-[#E7E1D9] bg-white p-2">
                 <img src={capa} alt="Capa" className="h-20 w-16 rounded-md object-cover" />
                 <div className="text-xs text-[#7A716A]">
-                  Vai como a <b>primeira imagem</b> {juntar ? 'do carrossel' : 'de cada post'}. A imagem é cortada no centro para caber no formato.
+                  Vai como a <b>primeira imagem</b> {juntar ? 'do carrossel' : formato === 'story' ? 'da primeira story (só uma vez)' : 'de cada post'}. A imagem aparece inteira, sobre um fundo borrado dela mesma.
                 </div>
                 <button className="ml-auto text-xs font-bold text-red-600 hover:underline" onClick={() => setCapa(null)}>
                   Remover

@@ -23,6 +23,10 @@ import { MAX_PAGINAS_VIDEO, renderizarImagens, renderizarPdf, renderizarVideo } 
 
 const BASE = '/api/public/mercadonunes';
 
+/** Postagens enviadas há pouco (hash do conteúdo → instante), pra não repetir a mesma por engano. */
+const postagensRecentes = new Map<string, number>();
+const JANELA_REPETICAO_MS = 10 * 60_000;
+
 interface ProdutoLinha {
   id: string;
   nome: string;
@@ -698,6 +702,17 @@ ${lista}`;
       return reply.status(400).send({ message: 'A Meta só baixa mídia de endereço https público (configure SOCIAL_MIDIA_BASE_URL no servidor).' });
     }
 
+    // Trava de repetição: o mesmo conteúdo (mesmo formato, páginas, capa e horário) não entra duas vezes em
+    // poucos minutos — clique duplo, "Postar" de novo depois de uma falha parcial, ou reenvio da tela.
+    const chaveRepeticao = crypto
+      .createHash('sha256')
+      .update(JSON.stringify({ formato, redes, d: b.dados, l: b.dados_lista, p: b.paginas, c: b.capa, q: b.agendado_para ?? null }))
+      .digest('hex');
+    const anterior = postagensRecentes.get(chaveRepeticao);
+    if (anterior && Date.now() - anterior < JANELA_REPETICAO_MS) {
+      return reply.status(409).send({ message: 'Esse mesmo tabloide acabou de ser enviado (menos de 10 min). Confira o Social media antes de postar de novo.' });
+    }
+
     const lista = Array.isArray(b.dados_lista) ? b.dados_lista.slice(0, 10) : [];
     if (lista.length > 1 && formato !== 'feed') return reply.status(400).send({ message: 'Carrossel de vários tabloides só no feed.' });
     const dados = await prepararDados(lista.length ? lista[0] : b.dados);
@@ -741,7 +756,12 @@ ${lista}`;
       const f = FORMATOS[formato];
       let jpg: Buffer;
       try {
-        jpg = await sharp(Buffer.from(m[2], 'base64')).rotate().resize(f.w, f.h, { fit: 'cover', position: 'centre' }).jpeg({ quality: 92 }).toBuffer();
+        // Imagem INTEIRA, sem cortar: uma capa horizontal (banner) cortada no centro pro 9:16 do story
+        // virava só um pedaço ampliado. Fica centralizada sobre um fundo borrado da própria imagem.
+        const origem = Buffer.from(m[2], 'base64');
+        const fundo = await sharp(origem).rotate().resize(f.w, f.h, { fit: 'cover', position: 'centre' }).blur(40).modulate({ brightness: 0.85 }).toBuffer();
+        const frente = await sharp(origem).rotate().resize(f.w, f.h, { fit: 'inside' }).toBuffer();
+        jpg = await sharp(fundo).composite([{ input: frente, gravity: 'centre' }]).jpeg({ quality: 92 }).toBuffer();
       } catch {
         return reply.status(400).send({ message: 'Não consegui ler a imagem da capa.' });
       }
@@ -766,6 +786,8 @@ ${lista}`;
       );
       return rows[0].id;
     });
+    postagensRecentes.set(chaveRepeticao, Date.now());
+    for (const [k, t] of postagensRecentes) if (Date.now() - t > JANELA_REPETICAO_MS) postagensRecentes.delete(k);
     return reply.status(201).send({ producaoId, agendadoPara: quando.toISOString(), imagens: anexos.length });
   });
 }

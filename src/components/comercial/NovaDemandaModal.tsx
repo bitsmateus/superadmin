@@ -336,7 +336,7 @@ export function NovaDemandaModal({ board: quadroFixo, onClose, onCriada, cliente
             onChange={(e) => setDemanda(e.target.value)}
             rows={3}
             placeholder="A demanda, do jeito que o cliente pediu. Vira a primeira Atualização do card."
-            className="w-full resize-y rounded-lg border border-line bg-transparent px-2.5 py-2 text-sm outline-none focus:border-accent/50"
+            className="w-full resize-y rounded-lg border border-line bg-surface px-2.5 py-2 text-sm text-foreground outline-none placeholder:text-foreground/35 focus:border-accent/50"
           />
         </div>
         {tentou && falta && <p className="text-xs text-danger">{falta}</p>}

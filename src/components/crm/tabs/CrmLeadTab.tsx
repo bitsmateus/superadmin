@@ -1,9 +1,10 @@
 import * as React from 'react'
 import { Link2, Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
 import { Section } from '../ClientDrawer'
 import { LeadLinkPanel } from '@/components/comercial/LeadLinkPanel'
 import { contractsService } from '@/services/contracts'
-import { fetchClientContract } from '@/services/crmLeadLookup'
+import { fetchClientContract, salvarLeadDaFicha } from '@/services/crmLeadLookup'
 import type { Client } from '@/types/client'
 
 /** Aba "Lead do CRM" — só aparece quando o drawer é aberto a partir do Pipeline do Suporte (ver
@@ -43,16 +44,26 @@ export function CrmLeadTab({ client }: { client: Client }) {
           <div className="grid min-h-[15vh] place-items-center text-sm text-foreground/50">
             <span className="inline-flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />Carregando…</span>
           </div>
-        ) : info.contractId ? (
-          <LeadLinkPanel
-            clientId={client.id}
-            vendaLeadId={info.vendaLeadId}
-            onLink={(id) => void contractsService.updateContract(info.contractId as string, { vendaLeadId: id })}
-          />
         ) : (
-          <div className="rounded-xl border border-line bg-card px-4 py-10 text-center text-sm text-foreground/45">
-            Este cliente ainda não tem contrato gerado — sem contrato não dá pra salvar o vínculo com uma lead do CRM.
-          </div>
+          <>
+            <LeadLinkPanel
+              clientId={client.id}
+              vendaLeadId={info.vendaLeadId}
+              onLink={(id) => {
+                // Com contrato, o vínculo mora no contrato; sem contrato (cliente que não passou pelo fluxo de contrato daqui),
+                // mora na ficha do cliente e vai junto se um contrato for gerado depois.
+                const salvar = info.contractId
+                  ? Promise.resolve(contractsService.updateContract(info.contractId, { vendaLeadId: id }))
+                  : salvarLeadDaFicha(client.id, id)
+                salvar
+                  .then(() => { setInfo((atual) => (atual ? { ...atual, vendaLeadId: id } : atual)); toast.success(id ? 'Lead vinculada.' : 'Vínculo removido.') })
+                  .catch((err: Error) => toast.error('Não consegui vincular: ' + (err.message || 'erro')))
+              }}
+            />
+            {!info.contractId && (
+              <p className="text-xs text-foreground/45">Este cliente não tem contrato gerado: o vínculo fica salvo na ficha dele e vale também se um contrato for gerado depois.</p>
+            )}
+          </>
         )}
       </Section>
     </div>

@@ -1,7 +1,8 @@
 import * as React from 'react'
-import { Check, Pencil, StickyNote, Trash2 } from 'lucide-react'
+import { Check, Link2, Pencil, StickyNote, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Section } from '../ClientDrawer'
+import { CrmLeadTab } from './CrmLeadTab'
 import { Button } from '@/components/ui/Button'
 import { useCurrentUser } from '@/hooks/useClients'
 import { db } from '@/services/db'
@@ -15,7 +16,7 @@ import type { Client } from '@/types/client'
  * mais precisar lembrar. Só o time vê. Aqui só aparece o que foi escrito nesta aba (e o briefing que o cliente preencheu), junto
  * com a linha do tempo do cliente: briefing gerado/enviado/preenchido, mudanças de etapa, reunião, entrega.
  */
-export function NotasInternasTab({ client }: { client: Client }) {
+function NotasEmLinha({ client }: { client: Client }) {
   const [user] = useCurrentUser()
   const [texto, setTexto] = React.useState('')
   const [editandoId, setEditandoId] = React.useState<string | null>(null)
@@ -179,6 +180,46 @@ export function NotasInternasTab({ client }: { client: Client }) {
           )}
         </div>
       </Section>
+    </div>
+  )
+}
+
+/**
+ * A aba "Notas internas" tem dois botões no topo: as notas (com a linha do tempo) e, no Pipeline do Suporte, a "Lead do CRM" —
+ * o histórico que o SDR combinou com o cliente (antes ficava dentro de "Entrega").
+ */
+export function NotasInternasTab({ client, comLeadDoCrm }: { client: Client; comLeadDoCrm?: boolean }) {
+  const [aba, setAba] = React.useState<'notas' | 'lead'>('notas')
+  const mostrandoLead = !!comLeadDoCrm && aba === 'lead'
+  return (
+    <div className="space-y-4">
+      {comLeadDoCrm && (
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setAba('notas')}
+            className={cn(
+              'inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors',
+              !mostrandoLead ? 'border-accent/40 bg-accent/10 text-accent' : 'border-line text-foreground/60 hover:bg-elevate/[0.04]',
+            )}
+          >
+            <StickyNote className="h-3.5 w-3.5" />
+            Notas
+          </button>
+          <button
+            type="button"
+            onClick={() => setAba('lead')}
+            className={cn(
+              'inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors',
+              mostrandoLead ? 'border-accent/40 bg-accent/10 text-accent' : 'border-line text-foreground/60 hover:bg-elevate/[0.04]',
+            )}
+          >
+            <Link2 className="h-3.5 w-3.5" />
+            Lead do CRM
+          </button>
+        </div>
+      )}
+      {mostrandoLead ? <CrmLeadTab client={client} /> : <NotasEmLinha client={client} />}
     </div>
   )
 }

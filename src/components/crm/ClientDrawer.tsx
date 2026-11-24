@@ -7,7 +7,6 @@ import {
   ClipboardList,
   ExternalLink,
   Folder,
-  Link2,
   ListChecks,
   Loader2,
   MessageSquare,
@@ -34,7 +33,6 @@ import { DeliveryTab } from './tabs/DeliveryTab'
 import { FollowUpTab } from './tabs/FollowUpTab'
 import { FichaTab } from './tabs/FichaTab'
 import { NotasInternasTab } from './tabs/NotasInternasTab'
-import { CrmLeadTab } from './tabs/CrmLeadTab'
 import { useClient, useCurrentUser } from '@/hooks/useClients'
 import { useAuth } from '@/hooks/useAuth'
 import { useOutsideClose } from '@/hooks/useOutsideClose'
@@ -71,7 +69,6 @@ const FOLDER_DEFS: TabDef[] = [
   { value: 'followup', label: 'Follow-up', icon: <Send className="h-3.5 w-3.5" /> },
 ]
 
-const CRM_LEAD_TAB_DEF: TabDef = { value: 'crmLead', label: 'Lead do CRM', icon: <Link2 className="h-3.5 w-3.5" /> }
 
 export interface ClientDrawerProps {
   clientId: string | null
@@ -86,8 +83,8 @@ export interface ClientDrawerProps {
 }
 
 export function ClientDrawer({ clientId, onClose, extraHeaderAction, showCrmLeadTab }: ClientDrawerProps) {
-  // Ordem: Lead do CRM, Briefing, Chatbot, Entrega, Follow-up (a do CRM só existe no Pipeline do Suporte).
-  const folderDefs = showCrmLeadTab ? [CRM_LEAD_TAB_DEF, ...FOLDER_DEFS] : FOLDER_DEFS
+  // A "Lead do CRM" (só no Pipeline do Suporte) agora fica na aba Notas internas, em cima; a pasta Entrega tem Briefing, Chatbot, Entrega e Follow-up.
+  const folderDefs = FOLDER_DEFS
   const tabDefs = TAB_DEFS
   const client = useClient(clientId ?? undefined)
   // Carrega os campos pesados (ex.: contract_file) que a listagem em massa
@@ -99,7 +96,7 @@ export function ClientDrawer({ clientId, onClose, extraHeaderAction, showCrmLead
   const [folderTab, setFolderTab] = React.useState('briefing')
   // Leva pra qualquer aba, inclusive as que ficam dentro da pasta "Entrega".
   const goTo = (t: string) => {
-    if (FOLDER_DEFS.some((f) => f.value === t) || t === CRM_LEAD_TAB_DEF.value) {
+    if (FOLDER_DEFS.some((f) => f.value === t)) {
       setFolderTab(t)
       setTab('folder')
     } else setTab(t)
@@ -371,7 +368,7 @@ export function ClientDrawer({ clientId, onClose, extraHeaderAction, showCrmLead
 
         <div className="p-4 sm:p-5">
           {tab === 'overview' && <OverviewTab client={client} />}
-          {tab === 'notas' && <NotasInternasTab client={client} />}
+          {tab === 'notas' && <NotasInternasTab client={client} comLeadDoCrm={showCrmLeadTab} />}
           {tab === 'setup' && <SetupPanel client={client} onGoTo={goTo} showAdvanced />}
           {tab === 'folder' && (
             <div className="space-y-4">
@@ -399,7 +396,6 @@ export function ClientDrawer({ clientId, onClose, extraHeaderAction, showCrmLead
               )}
               {folderTab === 'delivery' && <DeliveryTab client={client} />}
               {folderTab === 'followup' && <FollowUpTab client={client} />}
-              {folderTab === 'crmLead' && showCrmLeadTab && <CrmLeadTab client={client} />}
             </div>
           )}
           {tab === 'ficha' && <FichaTab client={client} />}

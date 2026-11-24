@@ -736,11 +736,12 @@ export const db = {
   },
 
   /** Nota escrita na aba "Notas internas" do cliente: só o time vê e aparece só lá. */
-  addInternalNote(clientId: string, text: string, author: string): NoteEntry | undefined {
+  addInternalNote(clientId: string, text: string, author: string, attachments?: NoteAttachment[]): NoteEntry | undefined {
     const client = db.getClient(clientId)
     if (!client) return undefined
     const note: NoteEntry = {
       id: uuid(), text, author: author || 'Anônimo', createdAt: new Date().toISOString(), internal: true, origem: 'notas_internas',
+      attachments: attachments?.length ? attachments : undefined,
     }
     db.updateClient(clientId, { notes: [note, ...(client.notes ?? [])] })
     return note

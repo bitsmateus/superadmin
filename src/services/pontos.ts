@@ -228,8 +228,15 @@ export const ROTULO_AJUSTE: Record<TipoAjuste, string> = {
   extra_banco: 'Converter em hora extra: banco',
   extra_pagamento: 'Converter em hora extra: pagamento',
   corrigir_batidas: 'Corrigir batidas',
-  atestado: 'Atestado (abona a falta)',
+  atestado: 'Falta abonada com atestado',
   descontar_horas: 'Descontar horas',
+}
+
+/** Nome de um ajuste já lançado, com as horas quando tem ("Atestado de 1h00", "Descontar horas: 1h00 (do salário)"). */
+export function rotuloDoAjuste(a: { tipo: TipoAjuste; minutos?: number | null; destino?: DestinoDesconto | null }): string {
+  if (a.tipo === 'atestado') return a.minutos ? `Atestado de ${horas(a.minutos)}` : 'Falta abonada com atestado (dia inteiro)'
+  if (a.tipo === 'descontar_horas' && a.minutos) return `Descontar ${horas(a.minutos)} ${a.destino === 'banco' ? 'do banco de horas' : 'do salário (R$)'}`
+  return ROTULO_AJUSTE[a.tipo]
 }
 
 /** Arquivo -> base64 (sem o prefixo data:). */

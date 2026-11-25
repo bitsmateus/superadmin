@@ -89,7 +89,7 @@ CREATE TABLE IF NOT EXISTS ponto_ajustes (
   data DATE NOT NULL,
   tipo TEXT NOT NULL CONSTRAINT ponto_ajustes_tipo_check CHECK (tipo IN (
     'abonar_manha', 'abonar_tarde', 'abonar_atraso', 'abonar_falta', 'justificar', 'folga', 'compensacao', 'feriado',
-    'perdoar_desconto', 'descontar_saldo', 'extra_banco', 'extra_pagamento', 'corrigir_batidas'
+    'perdoar_desconto', 'descontar_saldo', 'extra_banco', 'extra_pagamento', 'corrigir_batidas', 'atestado', 'descontar_horas'
   )),
   motivo TEXT NOT NULL CHECK (length(btrim(motivo)) > 0),
   -- corrigir_batidas: os horários que valem no lugar das batidas originais do dia (["08:00","12:00",…]).
@@ -149,7 +149,7 @@ ALTER TABLE ponto_colaboradores ADD COLUMN IF NOT EXISTS inicio_controle DATE;
 ALTER TABLE ponto_ajustes DROP CONSTRAINT IF EXISTS ponto_ajustes_tipo_check;
 ALTER TABLE ponto_ajustes ADD CONSTRAINT ponto_ajustes_tipo_check CHECK (tipo IN (
   'abonar_manha', 'abonar_tarde', 'abonar_atraso', 'abonar_falta', 'justificar', 'folga', 'compensacao', 'feriado',
-  'perdoar_desconto', 'descontar_saldo', 'extra_banco', 'extra_pagamento', 'corrigir_batidas'
+  'perdoar_desconto', 'descontar_saldo', 'extra_banco', 'extra_pagamento', 'corrigir_batidas', 'atestado', 'descontar_horas'
 ));
 
 -- Atestado (abona a falta) e desconto manual de horas (admin): quantos minutos e se sai do banco ou em R$.
@@ -296,6 +296,35 @@ UPDATE ponto_colaboradores SET ativo = false, atualizado_em = NOW()
 INSERT INTO ponto_auditoria (acao, detalhes, autor_nome)
 SELECT 'migracao_remover_arthur_luis', '{"inativados":["Arthur","Luis"]}', 'migração'
  WHERE NOT EXISTS (SELECT 1 FROM ponto_auditoria WHERE acao = 'migracao_remover_arthur_luis');
+
+-- Ajustes do Jean (pedido de 25/11), lançados uma vez: 25/11 atestado (falta abonada, dia inteiro); 18/11 atestado de 1h (dentista:
+-- saiu 1h mais cedo, abonado); 24/11 uma hora fora, descontada direto do salário. Só na primeira vez: depois vale o que for mexido na tela.
+INSERT INTO ponto_ajustes (colaborador_id, data, tipo, motivo, minutos, destino, autor_nome)
+SELECT c.id, v.data::date, v.tipo, v.motivo, v.minutos, v.destino, 'migração'
+  FROM ponto_colaboradores c
+ CROSS JOIN (VALUES
+   ('2026-11-25', 'atestado', 'Atestado: falta abonada (informado pela gestão)', NULL::int, NULL::text),
+   ('2026-11-18', 'atestado', 'Atestado de 1h (dentista): saiu 1h mais cedo, abonado', 60, NULL::text),
+   ('2026-11-24', 'descontar_horas', 'Ficou 1 hora fora: descontada direto do salário', 60, 'dinheiro')
+ ) AS v(data, tipo, motivo, minutos, destino)
+ WHERE lower(c.nome) = 'jean' AND NOT EXISTS (SELECT 1 FROM ponto_auditoria WHERE acao = 'migracao_jean_ajustes_2511');
+INSERT INTO ponto_auditoria (acao, detalhes, autor_nome)
+SELECT 'migracao_jean_ajustes_2511', '{"25/11":"atestado dia","18/11":"atestado 1h","24/11":"desconto 1h salário"}', 'migração'
+ WHERE NOT EXISTS (SELECT 1 FROM ponto_auditoria WHERE acao = 'migracao_jean_ajustes_2511');
+
+-- Ajustes do João (pedido de 25/11), lançados uma vez: segunda 23/11 não veio, com atestado (falta abonada, dia inteiro); 18/11 saiu
+-- 2h mais cedo, com atestado (abonado). Só na primeira vez: depois vale o que for mexido na tela.
+INSERT INTO ponto_ajustes (colaborador_id, data, tipo, motivo, minutos, destino, autor_nome)
+SELECT c.id, v.data::date, v.tipo, v.motivo, v.minutos, NULL, 'migração'
+  FROM ponto_colaboradores c
+ CROSS JOIN (VALUES
+   ('2026-11-23', 'atestado', 'Atestado: falta abonada (informado pela gestão)', NULL::int),
+   ('2026-11-18', 'atestado', 'Atestado de 2h: saiu 2h mais cedo, abonado (informado pela gestão)', 120)
+ ) AS v(data, tipo, motivo, minutos)
+ WHERE lower(c.nome) IN ('joão', 'joao') AND NOT EXISTS (SELECT 1 FROM ponto_auditoria WHERE acao = 'migracao_joao_ajustes_2511');
+INSERT INTO ponto_auditoria (acao, detalhes, autor_nome)
+SELECT 'migracao_joao_ajustes_2511', '{"23/11":"atestado dia","18/11":"atestado 2h"}', 'migração'
+ WHERE NOT EXISTS (SELECT 1 FROM ponto_auditoria WHERE acao = 'migracao_joao_ajustes_2511');
 
 -- Feriados nacionais de 2026 e 2027 (fixos e móveis). Estaduais (SC) e municipais (Tubarão) se cadastram na tela.
 INSERT INTO ponto_feriados (data, nome, abrangencia) VALUES

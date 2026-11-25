@@ -4,7 +4,25 @@ import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { horas, pontosService, type Colaborador, type DestinoDesconto } from '@/services/pontos'
 
-/** Horas e minutos de um desconto manual + de onde sai (banco de horas ou R$). Usado aqui e no ajuste de um dia. */
+/** Horas e minutos (ex.: 1 hora e 0 minutos). */
+export function CamposDeHoras({ h, m, onH, onM }: { h: string; m: string; onH: (v: string) => void; onM: (v: string) => void }) {
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      <label className="block text-xs font-medium text-foreground/70">
+        Horas
+        <input type="number" min={0} max={12} inputMode="numeric" value={h} onChange={(e) => onH(e.target.value)}
+          className="mt-1.5 block w-full rounded-lg border border-line bg-card px-2.5 py-2 text-sm text-foreground" aria-label="Horas" />
+      </label>
+      <label className="block text-xs font-medium text-foreground/70">
+        Minutos
+        <input type="number" min={0} max={59} inputMode="numeric" value={m} onChange={(e) => onM(e.target.value)}
+          className="mt-1.5 block w-full rounded-lg border border-line bg-card px-2.5 py-2 text-sm text-foreground" aria-label="Minutos" />
+      </label>
+    </div>
+  )
+}
+
+/** Desconto de horas: quanto e de onde sai. O padrão é o salário (R$); dá pra tirar do banco de horas em vez disso. */
 export function CamposDoDesconto({ h, m, destino, onH, onM, onDestino }: {
   h: string; m: string; destino: DestinoDesconto
   onH: (v: string) => void; onM: (v: string) => void; onDestino: (v: DestinoDesconto) => void
@@ -12,27 +30,16 @@ export function CamposDoDesconto({ h, m, destino, onH, onM, onDestino }: {
   const minutos = minutosDo(h, m)
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-3">
-        <label className="block text-xs font-medium text-foreground/70">
-          Horas
-          <input type="number" min={0} max={12} inputMode="numeric" value={h} onChange={(e) => onH(e.target.value)}
-            className="mt-1.5 block w-full rounded-lg border border-line bg-card px-2.5 py-2 text-sm text-foreground" aria-label="Horas a descontar" />
-        </label>
-        <label className="block text-xs font-medium text-foreground/70">
-          Minutos
-          <input type="number" min={0} max={59} inputMode="numeric" value={m} onChange={(e) => onM(e.target.value)}
-            className="mt-1.5 block w-full rounded-lg border border-line bg-card px-2.5 py-2 text-sm text-foreground" aria-label="Minutos a descontar" />
-        </label>
-      </div>
+      <CamposDeHoras h={h} m={m} onH={onH} onM={onM} />
       <label className="block text-xs font-medium text-foreground/70">
         Sai de onde
         <select value={destino} onChange={(e) => onDestino(e.target.value as DestinoDesconto)}
           className="mt-1.5 block w-full rounded-lg border border-line bg-card px-2.5 py-2 text-sm text-foreground">
+          <option value="dinheiro">Do salário (R$, descontado na folha)</option>
           <option value="banco">Do banco de horas (fica negativo até compensar)</option>
-          <option value="dinheiro">Em R$, descontado na folha</option>
         </select>
       </label>
-      {minutos > 0 && <p className="text-xs text-foreground/50">Vai descontar {horas(minutos)} {destino === 'dinheiro' ? 'em R$ (valor da hora do colaborador)' : 'do banco de horas'}.</p>}
+      {minutos > 0 && <p className="text-xs text-foreground/50">Vai descontar {horas(minutos)} {destino === 'dinheiro' ? 'do salário (valor da hora do colaborador)' : 'do banco de horas'}.</p>}
     </div>
   )
 }
@@ -76,19 +83,20 @@ export function LancamentoManualModal({ open, colaboradores, colaboradorInicial,
 }) {
   const ativos = React.useMemo(() => colaboradores.filter((c) => c.ativo), [colaboradores])
   const [colaboradorId, setColaboradorId] = React.useState('')
-  const [tipo, setTipo] = React.useState<'descontar_horas' | 'atestado'>('descontar_horas')
+  // As três coisas que o admin lança: falta abonada com atestado (dia inteiro), atestado de algumas horas e desconto de horas do salário.
+  const [tipo, setTipo] = React.useState<'atestado_dia' | 'atestado_horas' | 'desconto'>('atestado_dia')
   const [data, setData] = React.useState('')
   const [ate, setAte] = React.useState('')
   const [h, setH] = React.useState('1')
   const [m, setM] = React.useState('0')
-  const [destino, setDestino] = React.useState<DestinoDesconto>('banco')
+  const [destino, setDestino] = React.useState<DestinoDesconto>('dinheiro')
   const [motivo, setMotivo] = React.useState('')
   const [salvando, setSalvando] = React.useState(false)
 
   React.useEffect(() => {
     if (!open) return
     setColaboradorId(colaboradorInicial && ativos.some((c) => c.id === colaboradorInicial) ? colaboradorInicial : ativos[0]?.id ?? '')
-    setTipo('descontar_horas'); setData(ontemSP()); setAte(''); setH('1'); setM('0'); setDestino('banco'); setMotivo('')
+    setTipo('atestado_dia'); setData(ontemSP()); setAte(''); setH('1'); setM('0'); setDestino('dinheiro'); setMotivo('')
   }, [open, colaboradorInicial, ativos])
 
   const salvar = async () => {
@@ -97,17 +105,22 @@ export function LancamentoManualModal({ open, colaboradores, colaboradorInicial,
     if (!motivo.trim()) return toast.error('O motivo é obrigatório.')
     setSalvando(true)
     try {
-      if (tipo === 'descontar_horas') {
+      if (tipo === 'desconto') {
         const minutos = minutosDo(h, m)
         if (minutos < 1 || minutos > 12 * 60) { toast.error('Informe quanto descontar (de 1 minuto a 12 horas).'); return }
-        await pontosService.criarAjuste({ colaboradorId, data, tipo, motivo: motivo.trim(), minutos, destino })
+        await pontosService.criarAjuste({ colaboradorId, data, tipo: 'descontar_horas', motivo: motivo.trim(), minutos, destino })
         toast.success('Desconto lançado.')
+      } else if (tipo === 'atestado_horas') {
+        const minutos = minutosDo(h, m)
+        if (minutos < 1 || minutos > 12 * 60) { toast.error('Informe as horas do atestado (de 1 minuto a 12 horas).'); return }
+        await pontosService.criarAjuste({ colaboradorId, data, tipo: 'atestado', motivo: motivo.trim(), minutos })
+        toast.success('Atestado lançado: essas horas ficam abonadas.')
       } else {
         const fim = ate && ate >= data ? ate : data
         const dias = fim === data ? [data] : diasUteisEntre(data, fim)
         if (!dias.length) { toast.error('Nesse período não tem dia útil.'); return }
-        for (const d of dias) await pontosService.criarAjuste({ colaboradorId, data: d, tipo, motivo: motivo.trim() })
-        toast.success(dias.length === 1 ? 'Atestado lançado: a falta fica abonada.' : `Atestado lançado em ${dias.length} dias úteis.`)
+        for (const d of dias) await pontosService.criarAjuste({ colaboradorId, data: d, tipo: 'atestado', motivo: motivo.trim() })
+        toast.success(dias.length === 1 ? 'Falta abonada com atestado.' : `Atestado lançado em ${dias.length} dias úteis.`)
       }
       onSalvo()
       onClose()
@@ -136,29 +149,36 @@ export function LancamentoManualModal({ open, colaboradores, colaboradorInicial,
         </label>
         <label className="block text-xs font-medium text-foreground/70">
           O que lançar
-          <select value={tipo} onChange={(e) => setTipo(e.target.value as 'descontar_horas' | 'atestado')} className="mt-1.5 block w-full rounded-lg border border-line bg-card px-2.5 py-2 text-sm text-foreground">
-            <option value="descontar_horas">Descontar horas (saiu no meio do expediente, chegou atrasado…)</option>
-            <option value="atestado">Atestado (abona a falta)</option>
+          <select value={tipo} onChange={(e) => setTipo(e.target.value as 'atestado_dia' | 'atestado_horas' | 'desconto')} className="mt-1.5 block w-full rounded-lg border border-line bg-card px-2.5 py-2 text-sm text-foreground">
+            <option value="atestado_dia">Falta abonada com atestado (dia inteiro)</option>
+            <option value="atestado_horas">Atestado de algumas horas (ex.: dentista)</option>
+            <option value="desconto">Descontar horas do salário</option>
           </select>
         </label>
-        <div className={tipo === 'atestado' ? 'grid grid-cols-2 gap-3' : ''}>
+        <div className={tipo === 'atestado_dia' ? 'grid grid-cols-2 gap-3' : ''}>
           <label className="block text-xs font-medium text-foreground/70">
-            {tipo === 'atestado' ? 'Primeiro dia' : 'Dia'}
+            {tipo === 'atestado_dia' ? 'Primeiro dia' : 'Dia'}
             <input type="date" value={data} onChange={(e) => setData(e.target.value)} className="mt-1.5 block w-full rounded-lg border border-line bg-card px-2.5 py-2 text-sm text-foreground" />
           </label>
-          {tipo === 'atestado' && (
+          {tipo === 'atestado_dia' && (
             <label className="block text-xs font-medium text-foreground/70">
               Último dia (se for mais de um)
               <input type="date" value={ate} min={data} onChange={(e) => setAte(e.target.value)} className="mt-1.5 block w-full rounded-lg border border-line bg-card px-2.5 py-2 text-sm text-foreground" />
             </label>
           )}
         </div>
-        {tipo === 'descontar_horas' && <CamposDoDesconto h={h} m={m} destino={destino} onH={setH} onM={setM} onDestino={setDestino} />}
-        {tipo === 'atestado' && <p className="text-xs text-foreground/50">A falta do dia fica abonada (justificada): sem desconto em R$ e sem banco negativo. Em período, só os dias úteis (seg a sex) recebem o atestado.</p>}
+        {tipo === 'desconto' && <CamposDoDesconto h={h} m={m} destino={destino} onH={setH} onM={setM} onDestino={setDestino} />}
+        {tipo === 'atestado_horas' && (
+          <>
+            <CamposDeHoras h={h} m={m} onH={setH} onM={setM} />
+            <p className="text-xs text-foreground/50">Essas horas ficam abonadas: o que faltou no dia até esse tempo não desconta nem fica negativo no banco.</p>
+          </>
+        )}
+        {tipo === 'atestado_dia' && <p className="text-xs text-foreground/50">A falta do dia fica abonada: sem desconto em R$, sem banco negativo e sem perder horas. Em período, só os dias úteis (seg a sex) recebem o atestado.</p>}
         <label className="block text-xs font-medium text-foreground/70">
           Motivo (obrigatório)
           <textarea value={motivo} onChange={(e) => setMotivo(e.target.value)} rows={2}
-            placeholder={tipo === 'descontar_horas' ? 'Ex.: saiu no meio do expediente pra fazer entrevista' : 'Ex.: atestado médico'}
+            placeholder={tipo === 'desconto' ? 'Ex.: ficou 1 hora fora' : tipo === 'atestado_horas' ? 'Ex.: dentista' : 'Ex.: atestado médico'}
             className="mt-1.5 block w-full rounded-lg border border-line bg-card px-2.5 py-2 text-sm text-foreground placeholder:text-foreground/35" />
         </label>
       </div>

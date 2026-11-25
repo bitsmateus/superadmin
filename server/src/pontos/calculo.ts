@@ -61,7 +61,7 @@ export interface AjusteDoDia {
   tipo: TipoAjuste;
   /** corrigir_batidas: horários que valem no lugar das batidas originais. */
   batidas?: string[] | null;
-  /** descontar_horas: quantos minutos descontar (lançamento do admin, ex.: saiu no meio do expediente, chegou atrasado). */
+  /** descontar_horas: quantos minutos descontar (lançamento do admin). atestado: quantos minutos o atestado cobre (sem isso, é o dia inteiro). */
   minutos?: number | null;
   /** descontar_horas: do banco de horas (padrão) ou em R$. */
   destino?: DestinoDesconto | null;
@@ -290,18 +290,39 @@ const ABONOS: TipoAjuste[] = ['abonar_manha', 'abonar_tarde', 'abonar_falta', 'a
  * importar o relógio de novo não perde nem duplica o desconto.
  */
 export function calcularDia(e: EntradaDoDia): DiaCalculado {
-  const dia = calcularDiaBase(e);
-  const descontos = (e.ajustes ?? []).filter((a) => a.tipo === 'descontar_horas' && Number(a.minutos) > 0);
-  if (!descontos.length || dia.status === 'fora_controle') return dia;
+  let dia = calcularDiaBase(e);
+  if (dia.status === 'fora_controle') return dia;
   const vh = valorHora(e.cfg);
+
+  // Atestado de algumas horas (ex.: 1h no dentista): abona só esse tempo do saldo negativo do dia — sem desconto e sem banco negativo.
+  const abono = (e.ajustes ?? []).filter((a) => a.tipo === 'atestado' && Number(a.minutos) > 0).reduce((s, a) => s + Math.round(Number(a.minutos)), 0);
+  if (abono > 0 && dia.saldoMinutos < 0) {
+    const cobre = Math.min(abono, -dia.saldoMinutos);
+    const novoSaldo = dia.saldoMinutos + cobre;
+    // Se o saldo negativo já tinha virado R$ (converter em desconto), o abono tira o valor correspondente.
+    const descontoAbonado = dia.descontoCentavos > 0 ? Math.min(dia.descontoCentavos, Math.round((cobre * vh) / 60)) : 0;
+    dia = {
+      ...dia,
+      saldoMinutos: novoSaldo,
+      bancoMinutos: dia.bancoMinutos < 0 ? Math.min(0, dia.bancoMinutos + cobre) : dia.bancoMinutos,
+      descontoCentavos: dia.descontoCentavos - descontoAbonado,
+      status: novoSaldo === 0 ? 'abonado' : dia.status,
+      avisos: [...dia.avisos, `Atestado de ${Math.floor(cobre / 60)}h${String(cobre % 60).padStart(2, '0')}: abonado, sem desconto e sem banco negativo.`],
+    };
+  }
+
+  const descontos = (e.ajustes ?? []).filter((a) => a.tipo === 'descontar_horas' && Number(a.minutos) > 0);
+  if (!descontos.length) return dia;
   let bancoMin = 0;
   let dinheiroCentavos = 0;
   const avisos = [...dia.avisos];
   for (const d of descontos) {
     const min = Math.round(Number(d.minutos));
-    if (d.destino === 'dinheiro') dinheiroCentavos += Math.round((min * vh) / 60);
-    else bancoMin += min;
-    avisos.push(`Desconto manual de ${Math.floor(min / 60)}h${String(min % 60).padStart(2, '0')} ${d.destino === 'dinheiro' ? 'em R$' : 'do banco de horas'}${d.motivo ? `: ${d.motivo}` : ''}.`);
+    // Sem destino vale o salário (R$); "banco" tira do banco de horas.
+    const doBanco = d.destino === 'banco';
+    if (doBanco) bancoMin += min;
+    else dinheiroCentavos += Math.round((min * vh) / 60);
+    avisos.push(`Desconto manual de ${Math.floor(min / 60)}h${String(min % 60).padStart(2, '0')} ${doBanco ? 'do banco de horas' : 'do salário (R$)'}${d.motivo ? `: ${d.motivo}` : ''}.`);
   }
   return {
     ...dia,
@@ -317,6 +338,8 @@ function calcularDiaBase(e: EntradaDoDia): DiaCalculado {
   const ajustes = e.ajustes ?? [];
   const tem = (t: TipoAjuste) => ajustes.some((a) => a.tipo === t);
   const correcao = [...ajustes].reverse().find((a) => a.tipo === 'corrigir_batidas' && Array.isArray(a.batidas));
+  // Atestado SEM horas = o dia inteiro (falta abonada); COM horas é parcial e entra por cima do saldo (ver calcularDia).
+  const atestadoDia = ajustes.some((a) => a.tipo === 'atestado' && !(Number(a.minutos) > 0));
   const dow = diaDaSemana(e.data);
   const tol = Math.max(0, cfg.toleranciaMinutos);
   const vh = valorHora(cfg);
@@ -325,6 +348,23 @@ function calcularDiaBase(e: EntradaDoDia): DiaCalculado {
   const originais = [...e.batidas];
   const efetivas = (correcao ? (correcao.batidas ?? []) : originais)
     .map(paraMinutos).filter((m): m is number => m !== null).sort((a, b) => a - b);
+  // Esqueceu de bater o almoço: o almoço é fixo (12:00 às 13:30) e não conta, então só vale até o meio-dia e de 13:30 em diante.
+  //  - faltou a SAÍDA pro almoço (ex.: 09:48, 13:30, 18:08): considera a saída às 12:00;
+  //  - faltou a VOLTA do almoço (ex.: 08:00, 12:00, 18:00): considera a volta às 13:30.
+  // Só com 3 batidas, em dia já fechado (o último dia lido e hoje ficam "em andamento"); qualquer outro caso ímpar continua pedindo correção.
+  const almocoIniCfg = cfg.intervaloInicio ? paraMinutos(cfg.intervaloInicio) : null;
+  const diaFechado = e.data !== e.ultimoDiaLido && e.data !== e.hoje;
+  if (efetivas.length === 3 && almocoIniCfg != null && cfg.intervaloMinutos > 0 && diaFechado) {
+    const volta = almocoIniCfg + cfg.intervaloMinutos;
+    const [p0, p1, p2] = efetivas;
+    if (p0 < almocoIniCfg && p1 >= volta - 30 && p1 <= volta + 120 && p2 > p1) {
+      efetivas.splice(1, 0, almocoIniCfg);
+      avisos.push(`Faltou a batida de saída pro almoço: considerada ${paraHora(almocoIniCfg)} (o almoço não conta).`);
+    } else if (p0 < almocoIniCfg && p1 >= almocoIniCfg - 30 && p1 <= almocoIniCfg + 30 && p2 >= volta + 30) {
+      efetivas.splice(2, 0, volta);
+      avisos.push(`Faltou a batida de volta do almoço: considerada ${paraHora(volta)} (o almoço não conta).`);
+    }
+  }
   const n = efetivas.length;
 
   // Horas trabalhadas: pares entrada/saída em ordem; batida sobrando (ímpar) fica fora.
@@ -358,8 +398,8 @@ function calcularDiaBase(e: EntradaDoDia): DiaCalculado {
   }
 
   // 2) Ausência justificada (código do relógio ou lançamento): não deve nada.
-  if (e.turno?.tipo === 'justificada' || tem('justificar') || tem('atestado')) {
-    const justificativa = e.turno?.tipo === 'justificada' ? rotuloJustificativa(e.turno.codigo) : tem('atestado') ? 'Atestado' : 'Justificada';
+  if (e.turno?.tipo === 'justificada' || tem('justificar') || atestadoDia) {
+    const justificativa = e.turno?.tipo === 'justificada' ? rotuloJustificativa(e.turno.codigo) : atestadoDia ? 'Atestado' : 'Justificada';
     if (n) avisos.push('Dia justificado com batida: não somada.');
     return fechar('justificada', { justificativa });
   }

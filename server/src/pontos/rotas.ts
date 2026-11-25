@@ -540,7 +540,12 @@ export async function pontosRoutes(app: FastifyInstance) {
     if (tipo === 'descontar_horas') {
       minutos = Math.round(Number(req.body.minutos));
       if (!Number.isFinite(minutos) || minutos < 1 || minutos > 12 * 60) return reply.status(400).send({ message: 'Informe quanto descontar (de 1 minuto a 12 horas).' });
-      destino = req.body.destino === 'dinheiro' ? 'dinheiro' : 'banco';
+      destino = req.body.destino === 'banco' ? 'banco' : 'dinheiro';
+    }
+    // Atestado: sem horas = o dia inteiro (falta abonada); com horas = só esse tempo (ex.: 1h no dentista).
+    if (tipo === 'atestado' && req.body.minutos != null && req.body.minutos !== '') {
+      minutos = Math.round(Number(req.body.minutos));
+      if (!Number.isFinite(minutos) || minutos < 1 || minutos > 12 * 60) return reply.status(400).send({ message: 'Informe as horas do atestado (de 1 minuto a 12 horas).' });
     }
     const existe = await queryOne('SELECT 1 FROM ponto_colaboradores WHERE id = $1', [colaboradorId]);
     if (!existe) return reply.status(404).send({ message: 'Colaborador não encontrado.' });

@@ -387,12 +387,13 @@ test('descontar horas em R$: soma no desconto da folha e não mexe no banco', ()
   assert.equal(d.saldoMinutos, 0);
 });
 
-test('descontar horas: dois lançamentos no mesmo dia somam (saída no meio + atraso); sem destino vale banco', () => {
+test('descontar horas: sem destino vale o SALÁRIO (R$); "banco" tira do banco; dois lançamentos no mesmo dia somam', () => {
   const d = dia(['08:00', '12:00', '13:30', '18:00'], {
-    ajustes: [{ tipo: 'descontar_horas', minutos: 60, motivo: 'Entrevista' }, { tipo: 'descontar_horas', minutos: 60, destino: 'banco', motivo: 'Atraso' }],
+    ajustes: [{ tipo: 'descontar_horas', minutos: 60, motivo: 'Ficou 1 hora fora' }, { tipo: 'descontar_horas', minutos: 60, destino: 'banco', motivo: 'Atraso' }],
   });
-  assert.equal(d.bancoMinutos, -120);
-  assert.equal(d.saldoMinutos, -120);
+  assert.equal(d.descontoCentavos, 1000); // a 1ª (sem destino) vira R$: 1h × R$10
+  assert.equal(d.bancoMinutos, -60); // a 2ª, do banco
+  assert.equal(d.saldoMinutos, -60);
 });
 
 test('descontar horas vale em cima do que o dia já tem (atraso) e some antes do início do controle', () => {
@@ -424,4 +425,65 @@ test('o resumo do período soma os descontos manuais (banco e R$) e o atestado n
   assert.equal(r.resumo.descontoCentavos, 1000);
   assert.equal(r.resumo.faltas, 0);
   assert.equal(r.resumo.justificadas, 1);
+});
+
+test('atestado de algumas horas (ex.: 1h no dentista): saiu 1h mais cedo, o saldo negativo é abonado e não desconta nada', () => {
+  const saiuCedo = ['08:00', '12:00', '13:30', '17:00'];
+  const sem = dia(saiuCedo);
+  assert.equal(sem.saldoMinutos, -60);
+  assert.equal(sem.bancoMinutos, -60);
+  const com = dia(saiuCedo, { ajustes: [{ tipo: 'atestado', minutos: 60, motivo: 'Dentista' }] });
+  assert.equal(com.saldoMinutos, 0);
+  assert.equal(com.bancoMinutos, 0);
+  assert.equal(com.descontoCentavos, 0);
+  assert.equal(com.status, 'abonado');
+  assert.ok(com.avisos.some((a) => /Atestado de 1h00: abonado/.test(a)));
+});
+
+test('atestado de 2h cobre só o que faltou: saiu 1h mais cedo com atestado de 2h abona 1h; atestado de 30 min abona só 30', () => {
+  const saiuCedo = ['08:00', '12:00', '13:30', '17:00'];
+  assert.equal(dia(saiuCedo, { ajustes: [{ tipo: 'atestado', minutos: 120 }] }).saldoMinutos, 0);
+  const parcial = dia(saiuCedo, { ajustes: [{ tipo: 'atestado', minutos: 30 }] });
+  assert.equal(parcial.saldoMinutos, -30);
+  assert.equal(parcial.bancoMinutos, -30);
+  assert.equal(parcial.status, 'atraso');
+  // dia sem saldo negativo: o atestado de horas não muda nada
+  const certo = dia(['08:00', '12:00', '13:30', '18:00'], { ajustes: [{ tipo: 'atestado', minutos: 60 }] });
+  assert.equal(certo.saldoMinutos, 0);
+  assert.equal(certo.status, 'normal');
+});
+
+test('atestado de horas tira também o desconto em R$ quando o saldo negativo já tinha virado desconto', () => {
+  const d = dia(['08:00', '12:00', '13:30', '17:00'], { ajustes: [{ tipo: 'descontar_saldo' }, { tipo: 'atestado', minutos: 60 }] });
+  assert.equal(d.descontoCentavos, 0);
+  assert.equal(d.saldoMinutos, 0);
+});
+
+test('atestado SEM horas é o dia inteiro; COM horas não vira dia justificado', () => {
+  assert.equal(dia([], { ajustes: [{ tipo: 'atestado' }] }).status, 'justificada');
+  assert.equal(dia([], { ajustes: [{ tipo: 'atestado', minutos: 120 }] }).status, 'falta');
+});
+
+test('esqueceu de bater a saída do almoço (09:48, 13:30, 18:08): conta só até 12:00 e de 13:30 em diante', () => {
+  const d = dia(['09:48', '13:30', '18:08']);
+  assert.notEqual(d.status, 'incompleto');
+  assert.deepEqual(d.batidas, ['09:48', '12:00', '13:30', '18:08']);
+  assert.deepEqual(d.batidasOriginais, ['09:48', '13:30', '18:08']);
+  assert.equal(d.trabalhadoMinutos, (12 * 60 - (9 * 60 + 48)) + (18 * 60 + 8 - (13 * 60 + 30))); // 2h12 + 4h38
+  assert.ok(d.avisos.some((a) => /saída pro almoço: considerada 12:00/.test(a)));
+});
+
+test('esqueceu de bater a volta do almoço (08:00, 12:00, 18:00): conta até 12:00 e de 13:30 em diante, o almoço não soma', () => {
+  const d = dia(['08:00', '12:00', '18:00']);
+  assert.deepEqual(d.batidas, ['08:00', '12:00', '13:30', '18:00']);
+  assert.equal(d.trabalhadoMinutos, 510);
+  assert.equal(d.saldoMinutos, 0);
+  assert.ok(d.avisos.some((a) => /volta do almoço: considerada 13:30/.test(a)));
+});
+
+test('a regra do almoço não mexe no dia em andamento (hoje / último dia lido) nem em batida ímpar que não é de almoço', () => {
+  assert.equal(dia(['08:00', '12:00', '13:30'], { hoje: '2026-11-12' }).status, 'em_andamento');
+  assert.equal(dia(['08:00', '12:00', '13:30'], { data: SEG, hoje: '2026-11-20' }).status, 'em_andamento'); // último dia lido
+  assert.equal(dia(['08:00', '10:00', '18:00']).status, 'incompleto'); // 10:00 não é de almoço
+  assert.equal(dia(['08:00', '12:00', '13:30']).status, 'incompleto'); // dia fechado, mas a última batida é a volta: falta a saída
 });

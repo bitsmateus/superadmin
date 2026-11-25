@@ -47,6 +47,10 @@ export function ColaboradoresPontoModal({ open, onClose, colaboradores, onSalvo 
   onSalvo: () => void
 }) {
   const [selecionado, setSelecionado] = React.useState<string | 'novo' | null>(null)
+  // Quem está inativo (saiu dos Pontos, ex.: Arthur e Luis) fica escondido da lista; "Mostrar inativos" traz de volta pra reativar.
+  const [verInativos, setVerInativos] = React.useState(false)
+  const lista = React.useMemo(() => colaboradores.filter((c) => c.ativo || verInativos || c.id === selecionado), [colaboradores, verInativos, selecionado])
+  const qtdInativos = colaboradores.filter((c) => !c.ativo).length
   const atual = colaboradores.find((c) => c.id === selecionado)
   const [r, setR] = React.useState<Rascunho>(paraRascunho())
   const [salvando, setSalvando] = React.useState(false)
@@ -99,12 +103,18 @@ export function ColaboradoresPontoModal({ open, onClose, colaboradores, onSalvo 
       footer={<><Button variant="secondary" onClick={onClose}>Fechar</Button><Button onClick={() => void salvar()} disabled={salvando}>Salvar</Button></>}>
       <div className="grid gap-4 md:grid-cols-[12rem,1fr]">
         <div className="space-y-1">
-          {colaboradores.map((c) => (
+          {lista.map((c) => (
             <button key={c.id} type="button" onClick={() => setSelecionado(c.id)}
               className={cn('flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm', selecionado === c.id ? 'bg-accent/10 text-accent' : 'text-foreground hover:bg-elevate/[0.04]', !c.ativo && 'opacity-50')}>
               {c.nome}{!c.ativo && <span className="text-[10px]">inativo</span>}
             </button>
           ))}
+          {qtdInativos > 0 && (
+            <label className="mt-2 flex cursor-pointer items-center gap-2 px-1 text-[11px] text-foreground/55">
+              <input type="checkbox" checked={verInativos} onChange={(e) => setVerInativos(e.target.checked)} />
+              Mostrar inativos ({qtdInativos})
+            </label>
+          )}
           <Button size="sm" variant="secondary" className="mt-2 w-full" leftIcon={<Plus className="h-3.5 w-3.5" />} onClick={() => setSelecionado('novo')}>Novo colaborador</Button>
         </div>
 

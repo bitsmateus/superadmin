@@ -152,6 +152,15 @@ ALTER TABLE ponto_ajustes ADD CONSTRAINT ponto_ajustes_tipo_check CHECK (tipo IN
   'perdoar_desconto', 'descontar_saldo', 'extra_banco', 'extra_pagamento', 'corrigir_batidas'
 ));
 
+-- Atestado (abona a falta) e desconto manual de horas (admin): quantos minutos e se sai do banco ou em R$.
+ALTER TABLE ponto_ajustes ADD COLUMN IF NOT EXISTS minutos INT;
+ALTER TABLE ponto_ajustes ADD COLUMN IF NOT EXISTS destino TEXT;
+ALTER TABLE ponto_ajustes DROP CONSTRAINT IF EXISTS ponto_ajustes_tipo_check;
+ALTER TABLE ponto_ajustes ADD CONSTRAINT ponto_ajustes_tipo_check CHECK (tipo IN (
+  'abonar_manha', 'abonar_tarde', 'abonar_atraso', 'abonar_falta', 'justificar', 'folga', 'compensacao', 'feriado',
+  'perdoar_desconto', 'descontar_saldo', 'extra_banco', 'extra_pagamento', 'corrigir_batidas', 'atestado', 'descontar_horas'
+));
+
 -- Cadastro inicial (idempotente). Horário da casa: 08:00-12:00 e 13:30-18:00 (8h30), 10 min de tolerância.
 INSERT INTO ponto_colaboradores (nome) VALUES ('Jean'), ('João'), ('Arthur') ON CONFLICT DO NOTHING;
 -- Como aparecem na planilha do relógio.
@@ -279,6 +288,15 @@ INSERT INTO ponto_auditoria (acao, detalhes, autor_nome)
 SELECT 'migracao_cadastro_luis', '{"salario_base_centavos":250000,"inicio_controle":"2026-11-18","extra":"pagamento"}', 'migração'
  WHERE NOT EXISTS (SELECT 1 FROM ponto_auditoria WHERE acao = 'migracao_cadastro_luis');
 
+-- Arthur e Luis saem dos Pontos (pedido de 25/11): ficam inativos (somem da tela e da importação; os registros continuam guardados e
+-- dá pra reativar na tela de Colaboradores). Só na primeira vez: se alguém reativar depois, não é desativado de novo.
+UPDATE ponto_colaboradores SET ativo = false, atualizado_em = NOW()
+ WHERE lower(nome) IN ('arthur', 'luis', 'luís')
+   AND NOT EXISTS (SELECT 1 FROM ponto_auditoria WHERE acao = 'migracao_remover_arthur_luis');
+INSERT INTO ponto_auditoria (acao, detalhes, autor_nome)
+SELECT 'migracao_remover_arthur_luis', '{"inativados":["Arthur","Luis"]}', 'migração'
+ WHERE NOT EXISTS (SELECT 1 FROM ponto_auditoria WHERE acao = 'migracao_remover_arthur_luis');
+
 -- Feriados nacionais de 2026 e 2027 (fixos e móveis). Estaduais (SC) e municipais (Tubarão) se cadastram na tela.
 INSERT INTO ponto_feriados (data, nome, abrangencia) VALUES
   ('2026-01-01', 'Confraternização Universal', 'nacional'),
@@ -313,6 +331,7 @@ export async function pontosMigrado(pool: Pool): Promise<boolean> {
   // Confere a coluna mais nova: quem rodou uma versão anterior da migração precisa rodar de novo.
   const { rows } = await pool.query<{ ok: boolean }>(
     `SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'ponto_colaboradores' AND column_name = 'inicio_controle')
+        AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'ponto_ajustes' AND column_name = 'minutos')
         AND to_regclass('public.ponto_turnos') IS NOT NULL AS ok`
   );
   return rows[0]?.ok === true;

@@ -1,6 +1,6 @@
 import * as React from 'react'
 import {
-  AlertTriangle, CalendarCheck, CalendarDays, CalendarX, Clock, Download, FileText, History, Loader2, Lock, PiggyBank, Settings2, TimerOff,
+  AlertTriangle, CalendarCheck, CalendarDays, CalendarX, Clock, Download, FileText, History, Loader2, Lock, MinusCircle, PiggyBank, Settings2, TimerOff,
   TrendingUp, Upload, Users, Wallet,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -8,6 +8,7 @@ import { TopBar } from '@/components/layout/TopBar'
 import { Button } from '@/components/ui/Button'
 import { AjusteDiaModal } from '@/components/pontos/AjusteDiaModal'
 import { ColaboradoresPontoModal } from '@/components/pontos/ColaboradoresPontoModal'
+import { LancamentoManualModal } from '@/components/pontos/LancamentoManualModal'
 import { FeriadosModal } from '@/components/pontos/FeriadosModal'
 import { ImportacoesModal } from '@/components/pontos/ImportacoesModal'
 import { ImportarPontosModal } from '@/components/pontos/ImportarPontosModal'
@@ -63,7 +64,7 @@ export function FinanceiroPontosPage() {
   const [colaboradores, setColaboradores] = React.useState<Colaborador[]>([])
   const [erro, setErro] = React.useState<string | null>(null)
   const [aba, setAba] = React.useState<string>('todos')
-  const [modal, setModal] = React.useState<'importar' | 'colaboradores' | 'feriados' | 'importacoes' | null>(null)
+  const [modal, setModal] = React.useState<'importar' | 'colaboradores' | 'feriados' | 'importacoes' | 'lancar' | null>(null)
   const [diaAjuste, setDiaAjuste] = React.useState<DiaPonto | null>(null)
 
   const carregar = React.useCallback(async () => {
@@ -110,6 +111,7 @@ export function FinanceiroPontosPage() {
         subtitle="Gestão"
         rightSlot={(
           <div className="flex flex-wrap items-center gap-2">
+            <Button variant="secondary" size="sm" leftIcon={<MinusCircle className="h-4 w-4" />} onClick={() => setModal('lancar')}>Lançar desconto / atestado</Button>
             <Button variant="ghost" size="sm" leftIcon={<History className="h-4 w-4" />} onClick={() => setModal('importacoes')}>Importações</Button>
             <Button variant="ghost" size="sm" leftIcon={<CalendarDays className="h-4 w-4" />} onClick={() => setModal('feriados')}>Feriados</Button>
             <Button variant="ghost" size="sm" leftIcon={<Settings2 className="h-4 w-4" />} onClick={() => setModal('colaboradores')}>Colaboradores</Button>
@@ -181,6 +183,13 @@ export function FinanceiroPontosPage() {
       <ImportarPontosModal open={modal === 'importar'} onClose={() => setModal(null)} onImportado={() => void carregar()} colaboradores={colaboradores} />
       <ColaboradoresPontoModal open={modal === 'colaboradores'} onClose={() => setModal(null)} colaboradores={colaboradores} onSalvo={() => void carregar()} />
       <FeriadosModal open={modal === 'feriados'} onClose={() => setModal(null)} onSalvo={() => void carregar()} />
+      <LancamentoManualModal
+        open={modal === 'lancar'}
+        colaboradores={colaboradores}
+        colaboradorInicial={atual?.colaborador.id}
+        onClose={() => setModal(null)}
+        onSalvo={() => void carregar()}
+      />
       <ImportacoesModal open={modal === 'importacoes'} onClose={() => setModal(null)} onDesfeita={() => void carregar()} />
       {atual && (
         <AjusteDiaModal

@@ -3,9 +3,10 @@ import { Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
+import { CamposDoDesconto, minutosDo } from '@/components/pontos/LancamentoManualModal'
 import {
   dataBr, DIAS_CURTOS, horas, pontosService, ROTULO_AJUSTE,
-  type AjustePonto, type DiaPonto, type TipoAjuste,
+  type AjustePonto, type DestinoDesconto, type DiaPonto, type TipoAjuste,
 } from '@/services/pontos'
 
 /**
@@ -24,6 +25,9 @@ export function AjusteDiaModal({ dia, colaboradorId, colaboradorNome, ajustes, o
   const [tipo, setTipo] = React.useState<TipoAjuste>('abonar_manha')
   const [motivo, setMotivo] = React.useState('')
   const [batidas, setBatidas] = React.useState('')
+  const [hDesc, setHDesc] = React.useState('1')
+  const [mDesc, setMDesc] = React.useState('0')
+  const [destino, setDestino] = React.useState<DestinoDesconto>('banco')
   const [salvando, setSalvando] = React.useState(false)
 
   React.useEffect(() => {
@@ -41,9 +45,14 @@ export function AjusteDiaModal({ dia, colaboradorId, colaboradorNome, ajustes, o
     if (!motivo.trim()) return toast.error('O motivo é obrigatório.')
     const lista = batidas.split(/[\s,;]+/).map((s) => s.trim()).filter(Boolean)
     if (tipo === 'corrigir_batidas' && lista.some((h) => !/^\d{1,2}:\d{2}$/.test(h))) return toast.error('Batidas: use HH:MM separados por espaço.')
+    const minutos = minutosDo(hDesc, mDesc)
+    if (tipo === 'descontar_horas' && (minutos < 1 || minutos > 12 * 60)) return toast.error('Informe quanto descontar (de 1 minuto a 12 horas).')
     setSalvando(true)
     try {
-      await pontosService.criarAjuste({ colaboradorId, data: dia.data, tipo, motivo: motivo.trim(), batidas: tipo === 'corrigir_batidas' ? lista : undefined })
+      await pontosService.criarAjuste({
+        colaboradorId, data: dia.data, tipo, motivo: motivo.trim(), batidas: tipo === 'corrigir_batidas' ? lista : undefined,
+        ...(tipo === 'descontar_horas' ? { minutos, destino } : {}),
+      })
       toast.success('Ajuste registrado.')
       onSalvo()
       setMotivo('')
@@ -81,6 +90,7 @@ export function AjusteDiaModal({ dia, colaboradorId, colaboradorNome, ajustes, o
             <input value={batidas} onChange={(e) => setBatidas(e.target.value)} className="mt-1.5 block w-full rounded-lg border border-line bg-card px-2.5 py-2 text-sm" />
           </label>
         )}
+        {tipo === 'descontar_horas' && <CamposDoDesconto h={hDesc} m={mDesc} destino={destino} onH={setHDesc} onM={setMDesc} onDestino={setDestino} />}
         <label className="block text-xs font-medium text-foreground/70">
           Motivo (obrigatório)
           <textarea value={motivo} onChange={(e) => setMotivo(e.target.value)} rows={2} className="mt-1.5 block w-full rounded-lg border border-line bg-card px-2.5 py-2 text-sm" />
@@ -93,7 +103,10 @@ export function AjusteDiaModal({ dia, colaboradorId, colaboradorNome, ajustes, o
               {doDia.map((a) => (
                 <li key={a.id} className="flex items-start gap-2 px-3 py-2">
                   <div className="flex-1">
-                    <p className="font-medium text-foreground">{ROTULO_AJUSTE[a.tipo]}{a.batidas ? `: ${a.batidas.join(' ')}` : ''}</p>
+                    <p className="font-medium text-foreground">
+                      {ROTULO_AJUSTE[a.tipo]}{a.batidas ? `: ${a.batidas.join(' ')}` : ''}
+                      {a.tipo === 'descontar_horas' && a.minutos ? `: ${horas(a.minutos)} ${a.destino === 'dinheiro' ? '(em R$)' : '(do banco)'}` : ''}
+                    </p>
                     <p className="text-xs text-foreground/55">{a.motivo} · {a.autor} em {new Date(a.criadoEm).toLocaleString('pt-BR')}</p>
                   </div>
                   <button type="button" title="Remover ajuste" onClick={() => void remover(a)} className="rounded p-1 text-foreground/40 hover:bg-danger/10 hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>

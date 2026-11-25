@@ -4,7 +4,7 @@ import { ehDoFinanceiro } from '../lib/acessoMenu.js';
 import { renderFullHtmlToPdf } from '../lib/htmlPdf.js';
 import {
   calcularPeriodo, datasEntre, somarDias, TIPOS_DE_AJUSTE, valorHora, paraMinutos, formatarMinutos,
-  type AjusteDoDia, type ConfigColaborador, type TipoAjuste, type TurnoDoDia, type ResumoPeriodo,
+  type AjusteDoDia, type ConfigColaborador, type DestinoDesconto, type TipoAjuste, type TurnoDoDia, type ResumoPeriodo,
 } from './calculo.js';
 import { planejarImportacao, type BatidaExistente, type Decisao } from './importacao.js';
 import { pontosMigrado } from './migracao.js';
@@ -133,7 +133,7 @@ function camposDoColaborador(b: Record<string, unknown>): { campos: Record<strin
 
 // ───────────────────────────── cálculo do período ─────────────────────────────
 
-interface AjusteRow { id: string; colaborador_id: string; data: string; tipo: TipoAjuste; motivo: string; batidas: string[] | null; autor_nome: string; criado_em: string }
+interface AjusteRow { id: string; colaborador_id: string; data: string; tipo: TipoAjuste; motivo: string; batidas: string[] | null; minutos: number | null; destino: DestinoDesconto | null; autor_nome: string; criado_em: string }
 
 async function dadosParaCalculo(colabIds: string[], inicio: string, fim: string) {
   const [batidas, ajustes, feriados, importacoes, turnosRows] = await Promise.all([
@@ -143,7 +143,7 @@ async function dadosParaCalculo(colabIds: string[], inicio: string, fim: string)
       [colabIds, somarDias(inicio, -1), somarDias(fim, 1)]
     ),
     query<AjusteRow>(
-      `SELECT id, colaborador_id, to_char(data, 'YYYY-MM-DD') AS data, tipo, motivo, batidas, autor_nome, criado_em FROM ponto_ajustes
+      `SELECT id, colaborador_id, to_char(data, 'YYYY-MM-DD') AS data, tipo, motivo, batidas, minutos, destino, autor_nome, criado_em FROM ponto_ajustes
        WHERE removido_em IS NULL AND colaborador_id = ANY($1::uuid[]) AND data BETWEEN $2::date AND $3::date ORDER BY criado_em`,
       [colabIds, inicio, fim]
     ),
@@ -184,7 +184,7 @@ function calcularDoColaborador(r: ColabRow, inicio: string, fim: string, d: Awai
   const batidas = new Map<string, string[]>();
   for (const b of d.batidas) if (b.colaborador_id === r.id) batidas.set(b.data, [...(batidas.get(b.data) ?? []), b.hora]);
   const ajustes = new Map<string, AjusteDoDia[]>();
-  for (const a of d.ajustes) if (a.colaborador_id === r.id) ajustes.set(a.data, [...(ajustes.get(a.data) ?? []), { tipo: a.tipo, batidas: a.batidas }]);
+  for (const a of d.ajustes) if (a.colaborador_id === r.id) ajustes.set(a.data, [...(ajustes.get(a.data) ?? []), { tipo: a.tipo, batidas: a.batidas, minutos: a.minutos, destino: a.destino, motivo: a.motivo }]);
   return calcularPeriodo({
     inicio, fim, cfg: cfgDe(r), batidas, feriados: d.feriados, ajustes, cobertos: d.cobertos.get(r.id) ?? new Set(),
     turnos: d.turnos.get(r.id), hoje: hojeSP(),
@@ -258,7 +258,7 @@ async function conferirComResumo(
     const batidas = new Map<string, string[]>();
     for (const l of lidas) if (l.colaboradorId === c.id) batidas.set(l.data, [...(batidas.get(l.data) ?? []), l.hora]);
     const ajustes = new Map<string, AjusteDoDia[]>();
-    for (const a of dados.ajustes) if (a.colaborador_id === c.id) ajustes.set(a.data, [...(ajustes.get(a.data) ?? []), { tipo: a.tipo, batidas: a.batidas }]);
+    for (const a of dados.ajustes) if (a.colaborador_id === c.id) ajustes.set(a.data, [...(ajustes.get(a.data) ?? []), { tipo: a.tipo, batidas: a.batidas, minutos: a.minutos, destino: a.destino, motivo: a.motivo }]);
     const t = new Map(turnos.filter((x) => x.colaboradorId === c.id).map((x) => [x.data, { tipo: x.tipo, codigo: x.codigo }] as const));
     const { dias, resumo } = calcularPeriodo({
       inicio: lido.inicio, fim: lido.fim, cfg: cfgDe(c), batidas, feriados: dados.feriados, ajustes,
@@ -315,13 +315,23 @@ async function prepararImportacao(b: CorpoImportacao) {
   const associacoes = b.associacoes ?? {};
   const nomes = [...new Set([...leitura.registros.map((r) => r.nome), ...(leitura.nomes ?? [])])];
   const vinculo = new Map<string, string | null>();
+  // Quem está inativo (ex.: Arthur e Luis, removidos dos Pontos) e aparece na planilha do relógio: ignorado, sem pedir pra associar.
+  const ignoradosInativos = new Set<string>();
+  const inativos = new Set(colaboradores.filter((c) => !c.ativo).map((c) => c.id));
   for (const n of nomes) {
     const manual = associacoes[n];
     if (manual === 'ignorar') vinculo.set(n, null);
     else if (manual && colaboradores.some((c) => c.id === manual)) vinculo.set(n, manual);
-    else vinculo.set(n, vincularNome(n, colaboradores.map((c) => ({ id: c.id, nome: c.nome, apelidos: c.apelidos, ativo: c.ativo }))));
+    else {
+      const achado = vincularNome(n, colaboradores.map((c) => ({ id: c.id, nome: c.nome, apelidos: c.apelidos, ativo: c.ativo })));
+      vinculo.set(n, achado);
+      if (!achado) {
+        const entreTodos = vincularNome(n, colaboradores.map((c) => ({ id: c.id, nome: c.nome, apelidos: c.apelidos, ativo: true })));
+        if (entreTodos && inativos.has(entreTodos)) ignoradosInativos.add(n);
+      }
+    }
   }
-  const naoReconhecidos = nomes.filter((n) => !vinculo.get(n) && associacoes[n] !== 'ignorar');
+  const naoReconhecidos = nomes.filter((n) => !vinculo.get(n) && associacoes[n] !== 'ignorar' && !ignoradosInativos.has(n));
 
   const lidas = leitura.registros.flatMap((r) => {
     const colaboradorId = vinculo.get(r.nome);
@@ -503,17 +513,17 @@ export async function pontosRoutes(app: FastifyInstance) {
     const saida = [];
     for (const c of colaboradores) {
       const { dias, resumo } = calcularDoColaborador(c, de, ate, dados);
-      const temAlgo = dias.some((d) => d.batidas.length || d.ajustes.length);
-      if (!c.ativo && !temAlgo) continue;
+      // Colaborador inativo (ex.: Arthur e Luis, removidos dos Pontos) não aparece; reativar na tela de Colaboradores traz de volta.
+      if (!c.ativo) continue;
       const ajustes = dados.ajustes.filter((a) => a.colaborador_id === c.id)
-        .map((a) => ({ id: a.id, data: a.data, tipo: a.tipo, motivo: a.motivo, batidas: a.batidas, autor: a.autor_nome, criadoEm: a.criado_em }));
+        .map((a) => ({ id: a.id, data: a.data, tipo: a.tipo, motivo: a.motivo, batidas: a.batidas, minutos: a.minutos, destino: a.destino, autor: a.autor_nome, criadoEm: a.criado_em }));
       saida.push({ colaborador: colabParaApi(c), dias, resumo, ajustes, bancoAcumuladoMinutos: await bancoAcumulado(c, ate) });
     }
     return { de, ate, colaboradores: saida };
   });
 
   // ── ajustes ──
-  app.post<{ Body: { colaboradorId?: string; data?: string; tipo?: string; motivo?: string; batidas?: unknown } }>('/api/pontos/ajustes', auth, async (req, reply) => {
+  app.post<{ Body: { colaboradorId?: string; data?: string; tipo?: string; motivo?: string; batidas?: unknown; minutos?: unknown; destino?: unknown } }>('/api/pontos/ajustes', auth, async (req, reply) => {
     const { colaboradorId, data, tipo, motivo } = req.body ?? {};
     if (!colaboradorId || !data || !DIA.test(data)) return reply.status(400).send({ message: 'Colaborador e data obrigatórios.' });
     if (!tipo || !TIPOS_DE_AJUSTE.includes(tipo as TipoAjuste)) return reply.status(400).send({ message: 'Tipo de ajuste inválido.' });
@@ -524,14 +534,22 @@ export async function pontosRoutes(app: FastifyInstance) {
       batidas = (req.body.batidas as unknown[]).map(String).map((s) => s.trim()).filter(Boolean);
       if (batidas.some((h) => paraMinutos(h) === null)) return reply.status(400).send({ message: 'Horário inválido (use HH:MM).' });
     }
+    // Desconto manual de horas: quantos minutos (1 a 12h por lançamento) e de onde sai (banco de horas, padrão, ou R$).
+    let minutos: number | null = null;
+    let destino: DestinoDesconto | null = null;
+    if (tipo === 'descontar_horas') {
+      minutos = Math.round(Number(req.body.minutos));
+      if (!Number.isFinite(minutos) || minutos < 1 || minutos > 12 * 60) return reply.status(400).send({ message: 'Informe quanto descontar (de 1 minuto a 12 horas).' });
+      destino = req.body.destino === 'dinheiro' ? 'dinheiro' : 'banco';
+    }
     const existe = await queryOne('SELECT 1 FROM ponto_colaboradores WHERE id = $1', [colaboradorId]);
     if (!existe) return reply.status(404).send({ message: 'Colaborador não encontrado.' });
     const u = req.user as Usuario;
     const [a] = await query<{ id: string }>(
-      `INSERT INTO ponto_ajustes (colaborador_id, data, tipo, motivo, batidas, autor_id, autor_nome) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
-      [colaboradorId, data, tipo, motivo.trim(), batidas ? JSON.stringify(batidas) : null, u.sub, await nomeDe(u.sub)]
+      `INSERT INTO ponto_ajustes (colaborador_id, data, tipo, motivo, batidas, minutos, destino, autor_id, autor_nome) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
+      [colaboradorId, data, tipo, motivo.trim(), batidas ? JSON.stringify(batidas) : null, minutos, destino, u.sub, await nomeDe(u.sub)]
     );
-    await auditar('ajuste_criado', { id: a.id, colaboradorId, data, tipo, motivo, batidas }, u);
+    await auditar('ajuste_criado', { id: a.id, colaboradorId, data, tipo, motivo, batidas, minutos, destino }, u);
     return reply.status(201).send({ id: a.id });
   });
 

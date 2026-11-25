@@ -368,3 +368,60 @@ test('DSR: falta desconta as horas + 1 DSR até 15/12/2026 e + 2 DSR (sáb e dom
   const velha = per('2026-12-07', '2026-12-11', { '2026-12-07': ['08:00', '12:00', '13:30', '18:00'], '2026-12-08': ['08:00', '12:00', '13:30', '18:00'], '2026-12-10': ['08:00', '12:00', '13:30', '18:00'], '2026-12-11': ['08:00', '12:00', '13:30', '18:00'] });
   assert.equal(velha.dias.find((d) => d.data === '2026-12-09')!.dsrDias, 1);
 });
+
+test('descontar horas (admin): 1h tirada do banco de horas do dia; a batida original não muda', () => {
+  const certinho = ['08:00', '12:00', '13:30', '18:00'];
+  const d = dia(certinho, { ajustes: [{ tipo: 'descontar_horas', minutos: 60, destino: 'banco', motivo: 'Saiu no meio do expediente (entrevista)' }] });
+  assert.equal(d.saldoMinutos, -60);
+  assert.equal(d.bancoMinutos, -60);
+  assert.equal(d.descontoCentavos, 0);
+  assert.equal(d.trabalhadoMinutos, 510); // as horas batidas seguem iguais
+  assert.deepEqual(d.batidasOriginais, certinho);
+  assert.ok(d.avisos.some((a) => /Desconto manual de 1h00 do banco de horas: Saiu no meio do expediente/.test(a)));
+});
+
+test('descontar horas em R$: soma no desconto da folha e não mexe no banco', () => {
+  const d = dia(['08:00', '12:00', '13:30', '18:00'], { ajustes: [{ tipo: 'descontar_horas', minutos: 60, destino: 'dinheiro', motivo: 'Chegou atrasado' }] });
+  assert.equal(d.descontoCentavos, 1000); // 1h × R$10
+  assert.equal(d.bancoMinutos, 0);
+  assert.equal(d.saldoMinutos, 0);
+});
+
+test('descontar horas: dois lançamentos no mesmo dia somam (saída no meio + atraso); sem destino vale banco', () => {
+  const d = dia(['08:00', '12:00', '13:30', '18:00'], {
+    ajustes: [{ tipo: 'descontar_horas', minutos: 60, motivo: 'Entrevista' }, { tipo: 'descontar_horas', minutos: 60, destino: 'banco', motivo: 'Atraso' }],
+  });
+  assert.equal(d.bancoMinutos, -120);
+  assert.equal(d.saldoMinutos, -120);
+});
+
+test('descontar horas vale em cima do que o dia já tem (atraso) e some antes do início do controle', () => {
+  const atrasado = dia(['08:40', '12:00', '13:30', '18:00'], { ajustes: [{ tipo: 'descontar_horas', minutos: 30, destino: 'banco' }] });
+  assert.equal(atrasado.saldoMinutos, -40 - 30);
+  const antes = calcularDia({ data: '2026-11-05', batidas: [], cfg: CFG, coberto: true, ultimoDiaLido: SEG, hoje: '2026-11-20', ajustes: [{ tipo: 'descontar_horas', minutos: 60 }] });
+  assert.equal(antes.status, 'fora_controle');
+  assert.equal(antes.bancoMinutos, 0);
+});
+
+test('atestado abona a falta: dia justificado, sem desconto em R$ e sem banco negativo', () => {
+  const d = dia([], { ajustes: [{ tipo: 'atestado' }] });
+  assert.equal(d.status, 'justificada');
+  assert.equal(d.justificativa, 'Atestado');
+  assert.equal(d.descontoCentavos, 0);
+  assert.equal(d.bancoMinutos, 0);
+  assert.equal(d.faltaMinutos, 0);
+});
+
+test('o resumo do período soma os descontos manuais (banco e R$) e o atestado não conta como falta', () => {
+  const ajustes = new Map<string, AjusteDoDia[]>([
+    ['2026-11-12', [{ tipo: 'descontar_horas', minutos: 60, destino: 'banco' }]],
+    ['2026-11-13', [{ tipo: 'descontar_horas', minutos: 60, destino: 'dinheiro' }]],
+    ['2026-11-16', [{ tipo: 'atestado' }]],
+  ]);
+  const batidas = new Map<string, string[]>([['2026-11-12', ['08:00', '12:00', '13:30', '18:00']], ['2026-11-13', ['08:00', '12:00', '13:30', '18:00']]]);
+  const r = calcularPeriodo({ inicio: '2026-11-12', fim: '2026-11-16', cfg: CFG, batidas, feriados: new Map(), ajustes, cobertos: new Set(datasEntre('2026-11-12', '2026-11-16')), hoje: '2026-11-20' });
+  assert.equal(r.resumo.saldoMinutos, -60);
+  assert.equal(r.resumo.descontoCentavos, 1000);
+  assert.equal(r.resumo.faltas, 0);
+  assert.equal(r.resumo.justificadas, 1);
+});

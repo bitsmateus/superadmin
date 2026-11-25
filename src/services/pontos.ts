@@ -5,7 +5,9 @@ import { api } from '@/services/api'
 export type DestinoExtra = 'banco' | 'pagamento'
 export type TipoAjuste =
   | 'abonar_manha' | 'abonar_tarde' | 'abonar_falta' | 'abonar_atraso' | 'justificar' | 'folga' | 'compensacao'
-  | 'feriado' | 'perdoar_desconto' | 'descontar_saldo' | 'extra_banco' | 'extra_pagamento' | 'corrigir_batidas'
+  | 'feriado' | 'perdoar_desconto' | 'descontar_saldo' | 'extra_banco' | 'extra_pagamento' | 'corrigir_batidas' | 'atestado' | 'descontar_horas'
+/** Desconto manual de horas: sai do banco de horas ou vira R$ na folha. */
+export type DestinoDesconto = 'banco' | 'dinheiro'
 export type StatusDia =
   | 'normal' | 'atraso' | 'extra' | 'manha_sem_batida' | 'tarde_sem_batida' | 'em_andamento' | 'incompleto'
   | 'falta' | 'justificada' | 'feriado' | 'folga' | 'fora_controle' | 'abonado' | 'sem_registro'
@@ -98,6 +100,9 @@ export interface AjustePonto {
   tipo: TipoAjuste
   motivo: string
   batidas: string[] | null
+  /** descontar_horas: quantos minutos e de onde sai. */
+  minutos?: number | null
+  destino?: DestinoDesconto | null
   autor: string
   criadoEm: string
 }
@@ -180,7 +185,7 @@ export const pontosService = {
   salvarFeriado: (f: { data: string; nome: string; abrangencia: Feriado['abrangencia'] }) => api.post<Feriado>('/api/pontos/feriados', f),
   removerFeriado: (id: string) => api.delete(`/api/pontos/feriados/${id}`),
   periodo: (de: string, ate: string) => api.get<{ de: string; ate: string; colaboradores: PeriodoDoColaborador[] }>(`/api/pontos/periodo?de=${de}&ate=${ate}`),
-  criarAjuste: (a: { colaboradorId: string; data: string; tipo: TipoAjuste; motivo: string; batidas?: string[] }) => api.post<{ id: string }>('/api/pontos/ajustes', a),
+  criarAjuste: (a: { colaboradorId: string; data: string; tipo: TipoAjuste; motivo: string; batidas?: string[]; minutos?: number; destino?: DestinoDesconto }) => api.post<{ id: string }>('/api/pontos/ajustes', a),
   removerAjuste: (id: string) => api.delete(`/api/pontos/ajustes/${id}`),
   previa: (p: PedidoDeImportacao) => api.post<PreviaDeImportacao>('/api/pontos/importacoes/previa', p),
   importar: (p: PedidoDeImportacao) => api.post<{ id: string; novos: number; atualizados: number; ignorados: number }>('/api/pontos/importacoes', p),
@@ -223,6 +228,8 @@ export const ROTULO_AJUSTE: Record<TipoAjuste, string> = {
   extra_banco: 'Converter em hora extra: banco',
   extra_pagamento: 'Converter em hora extra: pagamento',
   corrigir_batidas: 'Corrigir batidas',
+  atestado: 'Atestado (abona a falta)',
+  descontar_horas: 'Descontar horas',
 }
 
 /** Arquivo -> base64 (sem o prefixo data:). */

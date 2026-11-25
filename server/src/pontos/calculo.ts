@@ -24,12 +24,17 @@ export type DestinoExtra = 'banco' | 'pagamento';
 
 export type TipoAjuste =
   | 'abonar_manha' | 'abonar_tarde' | 'abonar_falta' | 'abonar_atraso' | 'justificar' | 'folga' | 'compensacao'
-  | 'feriado' | 'perdoar_desconto' | 'descontar_saldo' | 'extra_banco' | 'extra_pagamento' | 'corrigir_batidas';
+  | 'feriado' | 'perdoar_desconto' | 'descontar_saldo' | 'extra_banco' | 'extra_pagamento' | 'corrigir_batidas'
+  | 'atestado' | 'descontar_horas';
 
 export const TIPOS_DE_AJUSTE: TipoAjuste[] = [
   'abonar_manha', 'abonar_tarde', 'abonar_falta', 'abonar_atraso', 'justificar', 'folga', 'compensacao',
   'feriado', 'perdoar_desconto', 'descontar_saldo', 'extra_banco', 'extra_pagamento', 'corrigir_batidas',
+  'atestado', 'descontar_horas',
 ];
+
+/** Pra onde vai o desconto manual de horas: sai do banco de horas ou vira desconto em R$ na folha. */
+export type DestinoDesconto = 'banco' | 'dinheiro';
 
 export interface ConfigColaborador {
   diasSemana: number[];
@@ -56,6 +61,11 @@ export interface AjusteDoDia {
   tipo: TipoAjuste;
   /** corrigir_batidas: horários que valem no lugar das batidas originais. */
   batidas?: string[] | null;
+  /** descontar_horas: quantos minutos descontar (lançamento do admin, ex.: saiu no meio do expediente, chegou atrasado). */
+  minutos?: number | null;
+  /** descontar_horas: do banco de horas (padrão) ou em R$. */
+  destino?: DestinoDesconto | null;
+  motivo?: string | null;
 }
 
 /** Turno do dia vindo da planilha (aba "Turnos"). Sem isso, vale o cadastro (dias da semana). */
@@ -274,7 +284,35 @@ function jornadaDoDia(cfg: ConfigColaborador, dow: number): number {
 
 const ABONOS: TipoAjuste[] = ['abonar_manha', 'abonar_tarde', 'abonar_falta', 'abonar_atraso'];
 
+/**
+ * O dia calculado, já com os descontos manuais de horas (ajuste "descontar_horas", só o admin lança): do banco de horas
+ * (saldo e banco do dia caem) ou em R$ (soma no desconto da folha). Vale por cima da batida: a original não muda, então
+ * importar o relógio de novo não perde nem duplica o desconto.
+ */
 export function calcularDia(e: EntradaDoDia): DiaCalculado {
+  const dia = calcularDiaBase(e);
+  const descontos = (e.ajustes ?? []).filter((a) => a.tipo === 'descontar_horas' && Number(a.minutos) > 0);
+  if (!descontos.length || dia.status === 'fora_controle') return dia;
+  const vh = valorHora(e.cfg);
+  let bancoMin = 0;
+  let dinheiroCentavos = 0;
+  const avisos = [...dia.avisos];
+  for (const d of descontos) {
+    const min = Math.round(Number(d.minutos));
+    if (d.destino === 'dinheiro') dinheiroCentavos += Math.round((min * vh) / 60);
+    else bancoMin += min;
+    avisos.push(`Desconto manual de ${Math.floor(min / 60)}h${String(min % 60).padStart(2, '0')} ${d.destino === 'dinheiro' ? 'em R$' : 'do banco de horas'}${d.motivo ? `: ${d.motivo}` : ''}.`);
+  }
+  return {
+    ...dia,
+    saldoMinutos: dia.saldoMinutos - bancoMin,
+    bancoMinutos: dia.bancoMinutos - bancoMin,
+    descontoCentavos: dia.descontoCentavos + dinheiroCentavos,
+    avisos,
+  };
+}
+
+function calcularDiaBase(e: EntradaDoDia): DiaCalculado {
   const { cfg } = e;
   const ajustes = e.ajustes ?? [];
   const tem = (t: TipoAjuste) => ajustes.some((a) => a.tipo === t);
@@ -320,8 +358,8 @@ export function calcularDia(e: EntradaDoDia): DiaCalculado {
   }
 
   // 2) Ausência justificada (código do relógio ou lançamento): não deve nada.
-  if (e.turno?.tipo === 'justificada' || tem('justificar')) {
-    const justificativa = e.turno?.tipo === 'justificada' ? rotuloJustificativa(e.turno.codigo) : 'Justificada';
+  if (e.turno?.tipo === 'justificada' || tem('justificar') || tem('atestado')) {
+    const justificativa = e.turno?.tipo === 'justificada' ? rotuloJustificativa(e.turno.codigo) : tem('atestado') ? 'Atestado' : 'Justificada';
     if (n) avisos.push('Dia justificado com batida: não somada.');
     return fechar('justificada', { justificativa });
   }

@@ -59,6 +59,8 @@ export interface ConfigTabloide {
   ia: boolean
 }
 
+export type EstiloVideo = 'tabloide' | 'black'
+
 export interface FundoSalvo {
   id: string
   nome: string
@@ -153,9 +155,9 @@ export const tabloideApi = {
   exportarPng: (dados: DadosTabloide) =>
     req<{ arquivos: { nome: string; dataUrl: string }[] }>('/tabloides/exportar', json({ dados, saida: 'png' })),
   exportarPdf: (dados: DadosTabloide) => req<Blob>('/tabloides/exportar', json({ dados, saida: 'pdf' }), true),
-  roteiroVideo: (dados: DadosTabloide) => req<{ textos: string[] }>('/tabloides/roteiro', json({ dados })),
-  gerarVideo: (dados: DadosTabloide, roteiro?: string[], voz?: string, trilha = true) =>
-    req<{ id: string; paginasNoVideo: number }>('/tabloides/video', json({ dados, roteiro, voz, trilha })),
+  roteiroVideo: (dados: DadosTabloide, estilo: EstiloVideo = 'tabloide') => req<{ textos: string[] }>('/tabloides/roteiro', json({ dados, estilo })),
+  gerarVideo: (dados: DadosTabloide, roteiro?: string[], voz?: string, trilha = true, estilo: EstiloVideo = 'tabloide') =>
+    req<{ id: string; paginasNoVideo: number }>('/tabloides/video', json({ dados, roteiro, voz, trilha, estilo })),
   statusVideo: (id: string) =>
     req<{ status: 'gerando' | 'pronto' | 'erro'; progresso: number; erro: string | null; aviso: string | null; tamanho: number }>(`/tabloides/video/${id}`),
   baixarVideo: (id: string) => req<Blob>(`/tabloides/video/${id}/arquivo`, {}, true),

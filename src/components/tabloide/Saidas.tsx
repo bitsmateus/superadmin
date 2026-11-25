@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { toast } from 'sonner'
-import { baixarArquivo, tabloideApi } from '@/api/mercadoNunesTabloide'
+import { baixarArquivo, tabloideApi, type EstiloVideo } from '@/api/mercadoNunesTabloide'
 import type { DadosTabloide } from '../../../server/src/lib/tabloide/layout'
 import { Modal, btnPrimario, btnSecundario, inputCls } from './EscolherFoto'
 import { PreviaTabloide } from './Previa'
@@ -40,6 +40,8 @@ export function ModalVideo({
   const [opcoes, setOpcoes] = React.useState(!atualizado)
   const [comLocutor, setComLocutor] = React.useState(vozOk)
   const [comTrilha, setComTrilha] = React.useState(true)
+  const [estilo, setEstilo] = React.useState<EstiloVideo>('tabloide')
+  const [refazendo, setRefazendo] = React.useState(false)
   const [roteiro, setRoteiro] = React.useState<string[] | null>(null)
   const [aviso, setAviso] = React.useState<string | null>(null)
 
@@ -48,7 +50,7 @@ export function ModalVideo({
     setProgresso(0)
     setOpcoes(false)
     try {
-      const { id, paginasNoVideo } = await tabloideApi.gerarVideo(dados, comLocutor && roteiro ? roteiro : undefined, undefined, comTrilha)
+      const { id, paginasNoVideo } = await tabloideApi.gerarVideo(dados, comLocutor && roteiro ? roteiro : undefined, undefined, comTrilha, estilo)
       paginas.current = paginasNoVideo
       for (;;) {
         await new Promise((r) => setTimeout(r, 1500))
@@ -67,24 +69,32 @@ export function ModalVideo({
       setErro((e as Error).message)
       setProgresso(null)
     }
-  }, [dados, chave, onPronto, comLocutor, roteiro, comTrilha])
+    setRefazendo(false)
+  }, [dados, chave, onPronto, comLocutor, roteiro, comTrilha, estilo])
 
+  // O roteiro muda com o estilo (o Black Friday fala uma vez por produto).
   React.useEffect(() => {
-    if (atualizado || !vozOk) return
+    if (!vozOk || !opcoes) return
+    let vivo = true
+    setRoteiro(null)
     tabloideApi
-        .roteiroVideo(dados)
-        .then((r) => setRoteiro(r.textos))
-        .catch((e: Error) => {
-          setErro(e.message)
-          setOpcoes(false)
-        })
-    // só na abertura
+      .roteiroVideo(dados, estilo)
+      .then((r) => vivo && setRoteiro(r.textos))
+      .catch((e: Error) => {
+        if (!vivo) return
+        setErro(e.message)
+        setOpcoes(false)
+      })
+    return () => {
+      vivo = false
+    }
+    // dados só vale na abertura da etapa
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [estilo, opcoes])
 
   return (
     <Modal titulo="Vídeo para Reels / Story" onFechar={onFechar} largura={520}>
-      {atualizado && video ? (
+      {atualizado && video && !refazendo && progresso === 1 ? (
         <div className="flex flex-col items-center gap-3">
           <video src={video.url} controls autoPlay loop muted playsInline className="max-h-[60vh] rounded-lg bg-black" />
           <p className="text-center text-xs text-[#9A928B]">
@@ -98,10 +108,38 @@ export function ModalVideo({
             <button className={btnPrimario} onClick={onPublicar}>
               Publicar como Reels
             </button>
+            <button
+              className={btnSecundario}
+              onClick={() => {
+                setRefazendo(true)
+                setOpcoes(true)
+                setProgresso(null)
+              }}
+            >
+              Fazer outro vídeo
+            </button>
           </div>
         </div>
       ) : opcoes ? (
         <div className="flex flex-col gap-3">
+          <div className="grid grid-cols-2 gap-2">
+            {([['tabloide', 'Tabloide', 'Várias ofertas por tela'], ['black', 'Black Friday', 'Um produto por vez, com estrela de preço']] as const).map(([id, nome, desc]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setEstilo(id)}
+                className={`rounded-xl border-2 p-3 text-left transition ${estilo === id ? 'border-[#C1503F] bg-[#FBEFEC]' : 'border-[#E6E1DA] bg-white hover:border-[#C1503F]/50'}`}
+              >
+                <span className="block text-sm font-bold text-[#2A2622]">{nome}</span>
+                <span className="block text-[11px] text-[#9A928B]">{desc}</span>
+              </button>
+            ))}
+          </div>
+          {estilo === 'black' && (
+            <p className="text-[11px] text-[#9A928B]">
+              Abertura com a logo, até 8 produtos (um por vez, na ordem da lista) e fechamento. O título do tabloide vira o texto das faixas.
+            </p>
+          )}
           <label className="flex items-center gap-2 text-sm font-semibold text-[#2A2622]">
             <input type="checkbox" checked={comTrilha} onChange={(e) => setComTrilha(e.target.checked)} />
             Trilha de fundo e efeito sonoro na troca de produto

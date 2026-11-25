@@ -74,6 +74,16 @@ export function roteiroPadrao(dados: DadosTabloide, maxPaginas: number): string[
   });
 }
 
+/** Roteiro do estilo Black Friday: abertura, uma fala por produto e fechamento (uma por página do vídeo). */
+export function roteiroBlack(dados: DadosTabloide, maxProdutos: number): string[] {
+  const titulo = textoFalado((dados.titulo || 'Black Friday').trim());
+  return [
+    `${titulo}! Ofertas imperdíveis, com descontos em todos os setores.`,
+    ...dados.itens.slice(0, maxProdutos).map((it) => falaDoItem(it)),
+    'Corre pro mercado, é por tempo limitado!',
+  ];
+}
+
 export const vozDisponivel = () => !!process.env.ELEVENLABS_API_KEY;
 
 /** Voz padrão (env); a tela pode escolher outra pelo id. */

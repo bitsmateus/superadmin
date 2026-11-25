@@ -14,7 +14,8 @@ import { separarPorSecao } from '../lib/tabloide/promocao.js';
 import { lerPdfDePromocao } from '../lib/plaquinhas/relatorio.js';
 import { prepararFoto, removeBgDisponivel, type ModoRecorte } from '../lib/tabloide/recorte.js';
 import { MAX_PAGINAS_VIDEO, renderizarImagens, renderizarPdf, renderizarVideo } from '../lib/tabloide/render.js';
-import { gerarVoz, roteiroPadrao, vozDisponivel } from '../lib/tabloide/locucao.js';
+import { gerarVoz, roteiroBlack, roteiroPadrao, vozDisponivel } from '../lib/tabloide/locucao.js';
+import { MAX_PRODUTOS_BLACK, paginasDoBlack } from '../lib/tabloide/black.js';
 
 /**
  * Tabloide automático do Mercado Nunes (/mercadonunes/tabloide).
@@ -570,13 +571,13 @@ export async function mercadoNunesTabloideRoutes(app: FastifyInstance) {
   );
 
   /** Roteiro da locução, uma fala por página do vídeo — a tela deixa editar antes de gerar. */
-  app.post<{ Body: { dados?: Partial<DadosTabloide> } }>(`${BASE}/tabloides/roteiro`, async (req, reply) => {
+  app.post<{ Body: { dados?: Partial<DadosTabloide>; estilo?: string } }>(`${BASE}/tabloides/roteiro`, async (req, reply) => {
     const dados = await prepararDados(req.body?.dados);
     if (!dados.itens.length) return reply.status(400).send({ message: 'Coloque pelo menos um produto.' });
-    return { textos: roteiroPadrao(dados, MAX_PAGINAS_VIDEO) };
+    return { textos: req.body?.estilo === 'black' ? roteiroBlack(dados, MAX_PRODUTOS_BLACK) : roteiroPadrao(dados, MAX_PAGINAS_VIDEO) };
   });
 
-  app.post<{ Body: { dados?: Partial<DadosTabloide>; roteiro?: string[]; voz?: string; trilha?: boolean } }>(`${BASE}/tabloides/video`, async (req, reply) => {
+  app.post<{ Body: { dados?: Partial<DadosTabloide>; roteiro?: string[]; voz?: string; trilha?: boolean; estilo?: string } }>(`${BASE}/tabloides/video`, async (req, reply) => {
     limparVideos();
     if ([...videos.values()].filter((j) => j.status === 'gerando').length >= 2) {
       return reply.status(429).send({ message: 'Já tem vídeo sendo gerado. Espere terminar.' });
@@ -587,7 +588,8 @@ export async function mercadoNunesTabloideRoutes(app: FastifyInstance) {
     const job: JobVideo = { status: 'gerando', progresso: 0, erro: null, arquivo: null, nome: `${nomeArquivo(dados)}-reels.mp4`, criado: Date.now() };
     videos.set(id, job);
     const logo = await logoDataUrl();
-    const falas = Array.isArray(req.body?.roteiro) && vozDisponivel() ? req.body.roteiro.slice(0, MAX_PAGINAS_VIDEO).map((t) => texto(t, 2500)) : [];
+    const estilo = req.body?.estilo === 'black' ? 'black' : 'tabloide';
+    const falas = Array.isArray(req.body?.roteiro) && vozDisponivel() ? req.body.roteiro.slice(0, MAX_PRODUTOS_BLACK + 2).map((t) => texto(t, 2500)) : [];
     const voz = typeof req.body?.voz === 'string' ? req.body.voz : undefined;
     void (async () => {
       // Voz primeiro (rápida); se falhar, o vídeo sai sem locução em vez de não sair.
@@ -602,7 +604,7 @@ export async function mercadoNunesTabloideRoutes(app: FastifyInstance) {
       }
       return renderizarVideo(dados, logo, (f) => {
         job.progresso = f;
-      }, audios, { trilha: req.body?.trilha !== false });
+      }, audios, { trilha: req.body?.trilha !== false, estilo });
     })()
       .then((buf) => {
         job.arquivo = buf;
@@ -613,7 +615,7 @@ export async function mercadoNunesTabloideRoutes(app: FastifyInstance) {
         job.erro = 'Não consegui gerar o vídeo. Tente de novo.';
         job.status = 'erro';
       });
-    return reply.status(202).send({ id, paginasNoVideo: MAX_PAGINAS_VIDEO });
+    return reply.status(202).send({ id, paginasNoVideo: estilo === 'black' ? paginasDoBlack(dados) : MAX_PAGINAS_VIDEO });
   });
 
   app.get<{ Params: { id: string } }>(`${BASE}/tabloides/video/:id`, async (req, reply) => {

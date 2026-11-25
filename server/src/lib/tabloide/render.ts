@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import puppeteer, { type Browser, type Page } from 'puppeteer-core';
 import { segundosDoMp3 } from './locucao.js';
+import { paginasBlack, type PaginaVideo } from './black.js';
 import { documentoCompleto, documentoDaPagina, montarPaginas, paginar, type DadosTabloide } from './layout.js';
 
 /**
@@ -192,9 +193,20 @@ export async function renderizarVideo(
   /** Locução (mp3) por página: a página dura o tempo da fala + um respiro, e o áudio entra no início dela. */
   locucao: (Buffer | null)[] = [],
   /** Trilha de fundo + "ding" na entrada de cada produto (ligado por padrão). */
-  extras: { trilha?: boolean } = {},
+  extras: { trilha?: boolean; estilo?: 'tabloide' | 'black' } = {},
 ): Promise<Buffer> {
-  const paginas = montarPaginas({ ...dados, formato: 'story' }, logoUrl, { animado: true }).slice(0, MAX_PAGINAS_VIDEO);
+  const dadosStory = { ...dados, formato: 'story' as const };
+  const paginas: PaginaVideo[] =
+    extras.estilo === 'black'
+      ? paginasBlack(dados, logoUrl)
+      : montarPaginas(dadosStory, logoUrl, { animado: true })
+          .slice(0, MAX_PAGINAS_VIDEO)
+          .map((p, n) => ({
+            doc: documentoDaPagina(dadosStory, p),
+            duracao: p.duracao,
+            // Cada card entra em 0,6 s + 0,14 s por posição (mesmo atraso da animação CSS); o "ding" cai no fim do pulo.
+            dings: (paginar(dados.itens, 'story', dados.porPagina)[n] ?? []).map((_, i) => 0.6 + i * 0.14 + 0.25),
+          }));
   const duracoes = paginas.map((p, i) => {
     const fala = locucao[i];
     return fala ? Math.max(p.duracao, segundosDoMp3(fala) + 1) : p.duracao;
@@ -232,9 +244,11 @@ export async function renderizarVideo(
       const page = await novaAba(browser, 1080, 1920);
       let feitos = 0;
       for (const [n, p] of paginas.entries()) {
-        await carregar(page, documentoDaPagina({ ...dados, formato: 'story' }, p));
-        // Página mais longa que a animação padrão: o fundo continua andando até o fim da fala.
-        await page.evaluate(`document.querySelector('.pg')?.style.setProperty('--dur', '${duracoes[n].toFixed(2)}s')`);
+        await carregar(page, p.doc);
+        // Página mais longa que a animação padrão: o fundo continua andando até o fim da fala. --t0 = quanto do vídeo
+        // já passou, pra fogo, brasas e faixas (que não reiniciam entre páginas) seguirem de onde pararam.
+        const t0 = duracoes.slice(0, n).reduce((a, b) => a + b, 0);
+        await page.evaluate(`(() => { const e = document.querySelector('.pg'); e?.style.setProperty('--dur', '${duracoes[n].toFixed(2)}s'); e?.style.setProperty('--t0', '${t0.toFixed(2)}s') })()`);
         await page.evaluate('document.getAnimations().forEach(a => a.pause())');
         const quadros = Math.round(duracoes[n] * FPS);
         for (let f = 0; f < quadros; f++) {
@@ -251,12 +265,10 @@ export async function renderizarVideo(
     await terminou;
     if (locucao.some(Boolean) || extras.trilha) {
       const comVoz = path.join(dir, 'com-voz.mp4');
-      // Cada card entra em 0,6 s + 0,14 s por posição (mesmo atraso da animação CSS); o "ding" cai no fim do pulo.
-      const porPagina = paginar(dados.itens, 'story', dados.porPagina).slice(0, paginas.length);
       const dings: number[] = [];
       let t0 = 0;
-      for (const [n, its] of porPagina.entries()) {
-        its.forEach((_, i) => dings.push(t0 + 0.6 + i * 0.14 + 0.25));
+      for (const [n, p] of paginas.entries()) {
+        p.dings.forEach((d) => dings.push(t0 + d));
         t0 += duracoes[n] ?? 0;
       }
       await juntarAudio(arquivo, comVoz, dir, locucao, duracoes, { trilha: !!extras.trilha, dings: extras.trilha ? dings : [] });

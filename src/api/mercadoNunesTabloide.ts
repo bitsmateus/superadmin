@@ -154,8 +154,8 @@ export const tabloideApi = {
     req<{ arquivos: { nome: string; dataUrl: string }[] }>('/tabloides/exportar', json({ dados, saida: 'png' })),
   exportarPdf: (dados: DadosTabloide) => req<Blob>('/tabloides/exportar', json({ dados, saida: 'pdf' }), true),
   roteiroVideo: (dados: DadosTabloide) => req<{ textos: string[] }>('/tabloides/roteiro', json({ dados })),
-  gerarVideo: (dados: DadosTabloide, roteiro?: string[], voz?: string) =>
-    req<{ id: string; paginasNoVideo: number }>('/tabloides/video', json({ dados, roteiro, voz })),
+  gerarVideo: (dados: DadosTabloide, roteiro?: string[], voz?: string, trilha = true) =>
+    req<{ id: string; paginasNoVideo: number }>('/tabloides/video', json({ dados, roteiro, voz, trilha })),
   statusVideo: (id: string) =>
     req<{ status: 'gerando' | 'pronto' | 'erro'; progresso: number; erro: string | null; aviso: string | null; tamanho: number }>(`/tabloides/video/${id}`),
   baixarVideo: (id: string) => req<Blob>(`/tabloides/video/${id}/arquivo`, {}, true),

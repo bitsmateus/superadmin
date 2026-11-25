@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import puppeteer, { type Browser, type Page } from 'puppeteer-core';
 import { segundosDoMp3 } from './locucao.js';
-import { documentoCompleto, documentoDaPagina, montarPaginas, type DadosTabloide } from './layout.js';
+import { documentoCompleto, documentoDaPagina, montarPaginas, paginar, type DadosTabloide } from './layout.js';
 
 /**
  * Gera os arquivos do tabloide no Chromium (o mesmo HTML da prévia): PNG por página, PDF com todas
@@ -100,25 +100,74 @@ function caminhoFfmpeg(): string {
 
 const FPS = 30;
 
-/** Põe cada fala no início da sua página (adelay + amix) e troca a faixa muda do vídeo por essa. */
-async function juntarLocucao(video: string, saida: string, dir: string, locucao: (Buffer | null)[], duracoes: number[]): Promise<void> {
+/**
+ * Trilha de fundo gerada na hora (sem arquivo, sem direitos autorais): arpejo de pentatônica sobre
+ * baixo em C–Am–F–G, 120 bpm. Quem quiser música própria aponta TABLOIDE_TRILHA pra um mp3 no servidor.
+ */
+const TRILHA_SINTETICA =
+  "st(0,floor(t*4));st(1,mod(ld(0),8));st(2,floor(mod(t/4,4)));" +
+  "st(3,if(lt(ld(2),1),0,if(lt(ld(2),2),-3,if(lt(ld(2),3),-7,-5))));" +
+  "st(4,if(lt(ld(1),1),0,if(lt(ld(1),2),4,if(lt(ld(1),3),7,if(lt(ld(1),4),9,if(lt(ld(1),5),12,if(lt(ld(1),6),9,if(lt(ld(1),7),7,4))))))));" +
+  "0.5*sin(2*PI*523.25*pow(2,ld(4)/12)*t)*exp(-5*mod(t*4,1))+0.35*sin(2*PI*130.81*pow(2,ld(3)/12)*t)*(0.6+0.4*exp(-3*mod(t*2,1)))";
+
+interface OpcoesAudio {
+  trilha: boolean;
+  /** Segundos (no vídeo) em que cada produto entra na tela: ganha um "ding". */
+  dings: number[];
+}
+
+/**
+ * Monta a faixa de áudio do vídeo: falas no início de cada página, "ding" na entrada de cada produto e
+ * trilha de fundo (mais baixa quando tem voz). Troca a faixa muda do vídeo por essa.
+ */
+async function juntarAudio(video: string, saida: string, dir: string, locucao: (Buffer | null)[], duracoes: number[], op: OpcoesAudio): Promise<void> {
+  const total = duracoes.reduce((a, b) => a + b, 0);
   const entradas: string[] = ['-i', video];
   const filtros: string[] = [];
+  const mixar: string[] = [];
   let inicio = 0;
   let k = 0;
+  let temVoz = false;
   for (const [i, fala] of locucao.entries()) {
     if (fala && i < duracoes.length) {
       const f = path.join(dir, `fala-${i}.mp3`);
       await fs.writeFile(f, fala);
       entradas.push('-i', f);
       k++;
+      temVoz = true;
       const ms = Math.round((inicio + 0.3) * 1000);
-      filtros.push(`[${k}:a]adelay=${ms}|${ms},volume=1.6[a${k}]`);
+      filtros.push(`[${k}:a]adelay=${ms}|${ms},volume=1.6[v${k}]`);
+      mixar.push(`[v${k}]`);
     }
     inicio += duracoes[i] ?? 0;
   }
-  const mix = filtros.length > 1 ? `${filtros.map((_, j) => `[a${j + 1}]`).join('')}amix=inputs=${filtros.length}:normalize=0:duration=longest[a]` : `[a1]anull[a]`;
-  const args = [...entradas, '-filter_complex', [...filtros, mix].join(';'), '-map', '0:v', '-map', '[a]', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', '-y', saida];
+  if (op.dings.length) {
+    const n = op.dings.length;
+    const saidas = op.dings.map((_, j) => `[g${j}]`).join('');
+    const base = 'sine=frequency=1568:duration=0.45,afade=t=out:st=0.05:d=0.4,volume=0.35';
+    filtros.push(n === 1 ? `${base}[g0]` : `${base},asplit=${n}${saidas}`);
+    op.dings.forEach((t, j) => {
+      const ms = Math.round(t * 1000);
+      filtros.push(`[g${j}]adelay=${ms}|${ms}[d${j}]`);
+      mixar.push(`[d${j}]`);
+    });
+  }
+  if (op.trilha) {
+    const vol = temVoz ? 0.16 : 0.32;
+    const propria = process.env.TABLOIDE_TRILHA;
+    let temArquivo = false;
+    if (propria) temArquivo = await fs.access(propria).then(() => true, () => false);
+    if (temArquivo) {
+      entradas.push('-stream_loop', '-1', '-t', total.toFixed(2), '-i', propria as string);
+      filtros.push(`[${k + 1}:a]volume=${vol}[mus]`);
+    } else {
+      filtros.push(`aevalsrc='${TRILHA_SINTETICA}':s=44100:d=${total.toFixed(2)},volume=${vol}[mus]`);
+    }
+    mixar.push('[mus]');
+  }
+  const fadeIni = Math.max(0, total - 1.2).toFixed(2);
+  filtros.push(`${mixar.join('')}amix=inputs=${mixar.length}:normalize=0:duration=longest,atrim=0:${total.toFixed(2)},afade=t=out:st=${fadeIni}:d=1.2[a]`);
+  const args = [...entradas, '-filter_complex', filtros.join(';'), '-map', '0:v', '-map', '[a]', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', '-y', saida];
   await new Promise<void>((resolve, reject) => {
     const ff = spawn(caminhoFfmpeg(), args, { stdio: ['ignore', 'ignore', 'pipe'] });
     let e = '';
@@ -126,7 +175,7 @@ async function juntarLocucao(video: string, saida: string, dir: string, locucao:
       e = (e + d.toString()).slice(-1500);
     });
     ff.on('error', reject);
-    ff.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`ffmpeg (voz) saiu com ${code}: ${e.slice(-300)}`))));
+    ff.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`ffmpeg (áudio) saiu com ${code}: ${e.slice(-300)}`))));
   });
 }
 export const MAX_PAGINAS_VIDEO = 4;
@@ -142,6 +191,8 @@ export async function renderizarVideo(
   progresso: (fracao: number) => void = () => undefined,
   /** Locução (mp3) por página: a página dura o tempo da fala + um respiro, e o áudio entra no início dela. */
   locucao: (Buffer | null)[] = [],
+  /** Trilha de fundo + "ding" na entrada de cada produto (ligado por padrão). */
+  extras: { trilha?: boolean } = {},
 ): Promise<Buffer> {
   const paginas = montarPaginas({ ...dados, formato: 'story' }, logoUrl, { animado: true }).slice(0, MAX_PAGINAS_VIDEO);
   const duracoes = paginas.map((p, i) => {
@@ -198,9 +249,17 @@ export async function renderizarVideo(
     });
     ff.stdin.end();
     await terminou;
-    if (locucao.some(Boolean)) {
+    if (locucao.some(Boolean) || extras.trilha) {
       const comVoz = path.join(dir, 'com-voz.mp4');
-      await juntarLocucao(arquivo, comVoz, dir, locucao, duracoes);
+      // Cada card entra em 0,6 s + 0,14 s por posição (mesmo atraso da animação CSS); o "ding" cai no fim do pulo.
+      const porPagina = paginar(dados.itens, 'story', dados.porPagina).slice(0, paginas.length);
+      const dings: number[] = [];
+      let t0 = 0;
+      for (const [n, its] of porPagina.entries()) {
+        its.forEach((_, i) => dings.push(t0 + 0.6 + i * 0.14 + 0.25));
+        t0 += duracoes[n] ?? 0;
+      }
+      await juntarAudio(arquivo, comVoz, dir, locucao, duracoes, { trilha: !!extras.trilha, dings: extras.trilha ? dings : [] });
       progresso(1);
       return await fs.readFile(comVoz);
     }

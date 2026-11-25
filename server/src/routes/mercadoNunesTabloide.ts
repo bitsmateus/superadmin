@@ -576,7 +576,7 @@ export async function mercadoNunesTabloideRoutes(app: FastifyInstance) {
     return { textos: roteiroPadrao(dados, MAX_PAGINAS_VIDEO) };
   });
 
-  app.post<{ Body: { dados?: Partial<DadosTabloide>; roteiro?: string[]; voz?: string } }>(`${BASE}/tabloides/video`, async (req, reply) => {
+  app.post<{ Body: { dados?: Partial<DadosTabloide>; roteiro?: string[]; voz?: string; trilha?: boolean } }>(`${BASE}/tabloides/video`, async (req, reply) => {
     limparVideos();
     if ([...videos.values()].filter((j) => j.status === 'gerando').length >= 2) {
       return reply.status(429).send({ message: 'Já tem vídeo sendo gerado. Espere terminar.' });
@@ -602,7 +602,7 @@ export async function mercadoNunesTabloideRoutes(app: FastifyInstance) {
       }
       return renderizarVideo(dados, logo, (f) => {
         job.progresso = f;
-      }, audios);
+      }, audios, { trilha: req.body?.trilha !== false });
     })()
       .then((buf) => {
         job.arquivo = buf;

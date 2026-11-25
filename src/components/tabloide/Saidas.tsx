@@ -37,8 +37,9 @@ export function ModalVideo({
   const [erro, setErro] = React.useState<string | null>(null)
   const paginas = React.useRef(0)
   // Antes de gerar: escolher se leva locutor e ajustar o que ele vai falar.
-  const [opcoes, setOpcoes] = React.useState(!atualizado && vozOk)
-  const [comLocutor, setComLocutor] = React.useState(true)
+  const [opcoes, setOpcoes] = React.useState(!atualizado)
+  const [comLocutor, setComLocutor] = React.useState(vozOk)
+  const [comTrilha, setComTrilha] = React.useState(true)
   const [roteiro, setRoteiro] = React.useState<string[] | null>(null)
   const [aviso, setAviso] = React.useState<string | null>(null)
 
@@ -47,7 +48,7 @@ export function ModalVideo({
     setProgresso(0)
     setOpcoes(false)
     try {
-      const { id, paginasNoVideo } = await tabloideApi.gerarVideo(dados, comLocutor && roteiro ? roteiro : undefined)
+      const { id, paginasNoVideo } = await tabloideApi.gerarVideo(dados, comLocutor && roteiro ? roteiro : undefined, undefined, comTrilha)
       paginas.current = paginasNoVideo
       for (;;) {
         await new Promise((r) => setTimeout(r, 1500))
@@ -66,13 +67,11 @@ export function ModalVideo({
       setErro((e as Error).message)
       setProgresso(null)
     }
-  }, [dados, chave, onPronto, comLocutor, roteiro])
+  }, [dados, chave, onPronto, comLocutor, roteiro, comTrilha])
 
   React.useEffect(() => {
-    if (atualizado) return
-    if (!vozOk) void gerar()
-    else
-      tabloideApi
+    if (atualizado || !vozOk) return
+    tabloideApi
         .roteiroVideo(dados)
         .then((r) => setRoteiro(r.textos))
         .catch((e: Error) => {
@@ -89,7 +88,7 @@ export function ModalVideo({
         <div className="flex flex-col items-center gap-3">
           <video src={video.url} controls autoPlay loop muted playsInline className="max-h-[60vh] rounded-lg bg-black" />
           <p className="text-center text-xs text-[#9A928B]">
-            Vídeo vertical 1080×1920{video.id && comLocutor && vozOk ? ', com locutor' : ''}, sem música.
+            Vídeo vertical 1080×1920{comLocutor && vozOk ? ', com locutor' : ''}{comTrilha ? ', com trilha' : ''}.
           </p>
           {aviso && <p className="text-center text-xs text-amber-700">{aviso}</p>}
           <div className="flex flex-wrap justify-center gap-2">
@@ -104,10 +103,18 @@ export function ModalVideo({
       ) : opcoes ? (
         <div className="flex flex-col gap-3">
           <label className="flex items-center gap-2 text-sm font-semibold text-[#2A2622]">
-            <input type="checkbox" checked={comLocutor} onChange={(e) => setComLocutor(e.target.checked)} />
-            Com locutor (voz falando os produtos e preços)
+            <input type="checkbox" checked={comTrilha} onChange={(e) => setComTrilha(e.target.checked)} />
+            Trilha de fundo e efeito sonoro na troca de produto
           </label>
-          {comLocutor && (
+          {vozOk ? (
+            <label className="flex items-center gap-2 text-sm font-semibold text-[#2A2622]">
+              <input type="checkbox" checked={comLocutor} onChange={(e) => setComLocutor(e.target.checked)} />
+              Com locutor (voz falando os produtos e preços)
+            </label>
+          ) : (
+            <p className="text-xs text-[#9A928B]">Locutor indisponível: falta configurar a chave do ElevenLabs no servidor.</p>
+          )}
+          {vozOk && comLocutor && (
             <div className="flex flex-col gap-2">
               <p className="text-xs text-[#9A928B]">O que o locutor vai falar em cada página do vídeo. Pode editar à vontade.</p>
               {roteiro === null ? (
@@ -126,7 +133,7 @@ export function ModalVideo({
               )}
             </div>
           )}
-          <button className={btnPrimario} disabled={comLocutor && roteiro === null} onClick={() => void gerar()}>
+          <button className={btnPrimario} disabled={vozOk && comLocutor && roteiro === null} onClick={() => void gerar()}>
             Gerar vídeo
           </button>
         </div>

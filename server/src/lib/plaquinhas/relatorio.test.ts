@@ -92,3 +92,22 @@ test('relatório em blocos: quantidade mínima, sem fim e vencidos', () => {
   assert.equal(r.itens[0].fim, '');
   assert.equal(r.itens[0].produto, 'CERVEJA SCHIN LATA');
 });
+
+test('relatório "Etiqueta de Gôndola": preço atual, sem fim', () => {
+  const r = lerRelatorio(
+    [
+      'MAX WORK ENTERPRISE - 572-Etiqueta de Gôndola 25/11/2026 09:04:22 Pagina: 1/1',
+      'Produto Cód. Barras Nome Etiqueta Grupo Qtd. Etiq. Promo. Data Preço Preço Qtd. Dif. Preço Dif. Saldo',
+      '88063 7893000084360 MARGARINA QUALY AERA 500G C/SAL IMPRESSA 0 0 NÃO 25/11/2026 8,99 9,00',
+      '11 116 ALFACE UN IMPRESSA 0 0 NÃO 25/11/2026 1,99 -67,00',
+      '41 413 BATATA BRANCA KG IMPRIMIR 0 0 NÃO 25/11/2026 5,99 22,38',
+    ],
+    HOJE,
+  );
+  assert.equal(r.modelo, 'etiquetas');
+  assert.equal(r.itens.length, 3);
+  assert.equal(r.itens[0].produtoId, '88063');
+  assert.equal(r.itens[0].preco, '8,99');
+  assert.equal(r.itens[1].preco, '1,99');
+  assert.equal(r.itens[1].fim, '');
+});

@@ -28,7 +28,7 @@ export interface ItemRelatorio {
 }
 
 export interface ResultadoRelatorio {
-  modelo: 'tabela' | 'blocos' | 'produtos';
+  modelo: 'tabela' | 'blocos' | 'produtos' | 'etiquetas';
   itens: ItemRelatorio[];
   /** Linhas inativas (Ativo = NÃO) que ficaram de fora. */
   inativos: number;
@@ -132,6 +132,12 @@ const RE_PRODUTOS = new RegExp(
   String.raw`^(\d+)\s+(\d{6,14})\s+(.+?)\s+(${NUM})\s+(${NUM})\s+(\d{2}/\d{2}/\d{4})\s+(\d{2}/\d{2}/\d{4})$`,
 );
 
+// "Etiqueta de Gôndola": `produto EAN NOME STATUS grupo qtdEtiq PROMO(SIM|NÃO) dataPreço preço qtdDif/saldo`.
+const RE_ETIQUETA = new RegExp(
+  String.raw`^(\d+)\s+(\d{1,14})\s+(.+?)\s+[A-Za-z]{5,}\s+\d+\s+\d+\s+(?:SIM|N.?O)\s+(\d{2}/\d{2}/\d{4})\s+(${NUM})\s+${NUM}$`,
+  'i',
+);
+
 const semMilhar = (v: string) => v.replace(/\./g, '');
 const dinheiro = (v: string) => {
   const n = Number(semMilhar(v).replace(',', '.'));
@@ -161,6 +167,17 @@ export function lerRelatorio(linhas: string[], hoje: Date = new Date()): Resulta
   };
 
   const ehBlocos = linhas.some((l) => RE_BLOCO.test(l));
+  if (!ehBlocos && linhas.some((l) => RE_ETIQUETA.test(l))) {
+    for (const l of linhas) {
+      const m = RE_ETIQUETA.exec(l);
+      if (!m) continue;
+      const preco = dinheiro(m[5]);
+      if (!Number.isFinite(preco) || preco <= 0) continue;
+      const { produto, peso } = limparNome(m[3]);
+      juntar({ produtoId: m[1], ean: m[2], grupo: '', nomeOriginal: m[3].trim(), produto, peso, preco: m[5], precoDe: '', minUnidades: '', inicio: m[4], fim: '' });
+    }
+    return { modelo: 'etiquetas', itens, inativos, repetidos, vencidos };
+  }
   if (!ehBlocos && linhas.some((l) => RE_PRODUTOS.test(l))) {
     for (const l of linhas) {
       const m = RE_PRODUTOS.exec(l);

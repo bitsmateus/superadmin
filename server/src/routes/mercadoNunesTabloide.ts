@@ -14,6 +14,7 @@ import { separarPorSecao } from '../lib/tabloide/promocao.js';
 import { lerPdfDePromocao } from '../lib/plaquinhas/relatorio.js';
 import { prepararFoto, removeBgDisponivel, type ModoRecorte } from '../lib/tabloide/recorte.js';
 import { MAX_PAGINAS_VIDEO, renderizarImagens, renderizarPdf, renderizarVideo } from '../lib/tabloide/render.js';
+import { gerarVoz, roteiroPadrao, vozDisponivel } from '../lib/tabloide/locucao.js';
 
 /**
  * Tabloide automático do Mercado Nunes (/mercadonunes/tabloide).
@@ -152,6 +153,8 @@ interface JobVideo {
   arquivo: Buffer | null;
   nome: string;
   criado: number;
+  /** Algo deu errado só na parte opcional (ex.: a voz) e o vídeo saiu mesmo assim. */
+  aviso?: string | null;
 }
 const videos = new Map<string, JobVideo>();
 function limparVideos() {
@@ -333,7 +336,7 @@ export async function mercadoNunesTabloideRoutes(app: FastifyInstance) {
     const cfg = await queryOne<{ endereco: string; whatsapp: string; endereco2: string; whatsapp2: string; aviso: string }>(
       'SELECT endereco, whatsapp, endereco2, whatsapp2, aviso FROM mn_tabloide_config WHERE id = true',
     );
-    return { ...cfg, removeBg: removeBgDisponivel(), cosmos: !!process.env.COSMOS_TOKEN, ia: !!process.env.ANTHROPIC_API_KEY };
+    return { ...cfg, removeBg: removeBgDisponivel(), voz: vozDisponivel(), cosmos: !!process.env.COSMOS_TOKEN, ia: !!process.env.ANTHROPIC_API_KEY };
   });
 
   app.patch<{ Body: { endereco?: string; whatsapp?: string; endereco2?: string; whatsapp2?: string; aviso?: string } }>(`${BASE}/tabloide/config`, async (req) => {
@@ -566,7 +569,14 @@ export async function mercadoNunesTabloideRoutes(app: FastifyInstance) {
     },
   );
 
-  app.post<{ Body: { dados?: Partial<DadosTabloide> } }>(`${BASE}/tabloides/video`, async (req, reply) => {
+  /** Roteiro da locução, uma fala por página do vídeo — a tela deixa editar antes de gerar. */
+  app.post<{ Body: { dados?: Partial<DadosTabloide> } }>(`${BASE}/tabloides/roteiro`, async (req, reply) => {
+    const dados = await prepararDados(req.body?.dados);
+    if (!dados.itens.length) return reply.status(400).send({ message: 'Coloque pelo menos um produto.' });
+    return { textos: roteiroPadrao(dados, MAX_PAGINAS_VIDEO) };
+  });
+
+  app.post<{ Body: { dados?: Partial<DadosTabloide>; roteiro?: string[]; voz?: string } }>(`${BASE}/tabloides/video`, async (req, reply) => {
     limparVideos();
     if ([...videos.values()].filter((j) => j.status === 'gerando').length >= 2) {
       return reply.status(429).send({ message: 'Já tem vídeo sendo gerado. Espere terminar.' });
@@ -577,9 +587,23 @@ export async function mercadoNunesTabloideRoutes(app: FastifyInstance) {
     const job: JobVideo = { status: 'gerando', progresso: 0, erro: null, arquivo: null, nome: `${nomeArquivo(dados)}-reels.mp4`, criado: Date.now() };
     videos.set(id, job);
     const logo = await logoDataUrl();
-    void renderizarVideo(dados, logo, (f) => {
-      job.progresso = f;
-    })
+    const falas = Array.isArray(req.body?.roteiro) && vozDisponivel() ? req.body.roteiro.slice(0, MAX_PAGINAS_VIDEO).map((t) => texto(t, 2500)) : [];
+    const voz = typeof req.body?.voz === 'string' ? req.body.voz : undefined;
+    void (async () => {
+      // Voz primeiro (rápida); se falhar, o vídeo sai sem locução em vez de não sair.
+      let audios: (Buffer | null)[] = [];
+      if (falas.some(Boolean)) {
+        try {
+          audios = await Promise.all(falas.map((t) => (t ? gerarVoz(t, voz) : Promise.resolve(null))));
+        } catch (err) {
+          console.error('[tabloide] voz falhou', (err as Error).message);
+          job.aviso = 'Não consegui gerar a voz (ElevenLabs). O vídeo saiu sem locução.';
+        }
+      }
+      return renderizarVideo(dados, logo, (f) => {
+        job.progresso = f;
+      }, audios);
+    })()
       .then((buf) => {
         job.arquivo = buf;
         job.status = 'pronto';
@@ -595,7 +619,7 @@ export async function mercadoNunesTabloideRoutes(app: FastifyInstance) {
   app.get<{ Params: { id: string } }>(`${BASE}/tabloides/video/:id`, async (req, reply) => {
     const j = videos.get(req.params.id);
     if (!j) return reply.status(404).send({ message: 'Vídeo não encontrado (passou de 30 minutos?). Gere de novo.' });
-    return { status: j.status, progresso: j.progresso, erro: j.erro, tamanho: j.arquivo?.length ?? 0 };
+    return { status: j.status, progresso: j.progresso, erro: j.erro, aviso: j.aviso ?? null, tamanho: j.arquivo?.length ?? 0 };
   });
 
   app.get<{ Params: { id: string } }>(`${BASE}/tabloides/video/:id/arquivo`, async (req, reply) => {

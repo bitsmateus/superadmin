@@ -3,6 +3,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import puppeteer, { type Browser, type Page } from 'puppeteer-core';
+import { segundosDoMp3 } from './locucao.js';
 import { documentoCompleto, documentoDaPagina, montarPaginas, type DadosTabloide } from './layout.js';
 
 /**
@@ -98,6 +99,36 @@ function caminhoFfmpeg(): string {
 }
 
 const FPS = 30;
+
+/** Põe cada fala no início da sua página (adelay + amix) e troca a faixa muda do vídeo por essa. */
+async function juntarLocucao(video: string, saida: string, dir: string, locucao: (Buffer | null)[], duracoes: number[]): Promise<void> {
+  const entradas: string[] = ['-i', video];
+  const filtros: string[] = [];
+  let inicio = 0;
+  let k = 0;
+  for (const [i, fala] of locucao.entries()) {
+    if (fala && i < duracoes.length) {
+      const f = path.join(dir, `fala-${i}.mp3`);
+      await fs.writeFile(f, fala);
+      entradas.push('-i', f);
+      k++;
+      const ms = Math.round((inicio + 0.3) * 1000);
+      filtros.push(`[${k}:a]adelay=${ms}|${ms},volume=1.6[a${k}]`);
+    }
+    inicio += duracoes[i] ?? 0;
+  }
+  const mix = filtros.length > 1 ? `${filtros.map((_, j) => `[a${j + 1}]`).join('')}amix=inputs=${filtros.length}:normalize=0:duration=longest[a]` : `[a1]anull[a]`;
+  const args = [...entradas, '-filter_complex', [...filtros, mix].join(';'), '-map', '0:v', '-map', '[a]', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', '-y', saida];
+  await new Promise<void>((resolve, reject) => {
+    const ff = spawn(caminhoFfmpeg(), args, { stdio: ['ignore', 'ignore', 'pipe'] });
+    let e = '';
+    ff.stderr.on('data', (d: Buffer) => {
+      e = (e + d.toString()).slice(-1500);
+    });
+    ff.on('error', reject);
+    ff.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`ffmpeg (voz) saiu com ${code}: ${e.slice(-300)}`))));
+  });
+}
 export const MAX_PAGINAS_VIDEO = 4;
 
 /**
@@ -109,9 +140,15 @@ export async function renderizarVideo(
   dados: DadosTabloide,
   logoUrl: string,
   progresso: (fracao: number) => void = () => undefined,
+  /** Locução (mp3) por página: a página dura o tempo da fala + um respiro, e o áudio entra no início dela. */
+  locucao: (Buffer | null)[] = [],
 ): Promise<Buffer> {
   const paginas = montarPaginas({ ...dados, formato: 'story' }, logoUrl, { animado: true }).slice(0, MAX_PAGINAS_VIDEO);
-  const totalQuadros = paginas.reduce((s, p) => s + Math.round(p.duracao * FPS), 0);
+  const duracoes = paginas.map((p, i) => {
+    const fala = locucao[i];
+    return fala ? Math.max(p.duracao, segundosDoMp3(fala) + 1) : p.duracao;
+  });
+  const totalQuadros = duracoes.reduce((s, d) => s + Math.round(d * FPS), 0);
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'tabloide-'));
   const arquivo = path.join(dir, 'video.mp4');
   try {
@@ -143,10 +180,12 @@ export async function renderizarVideo(
     await comNavegador(async (browser) => {
       const page = await novaAba(browser, 1080, 1920);
       let feitos = 0;
-      for (const p of paginas) {
+      for (const [n, p] of paginas.entries()) {
         await carregar(page, documentoDaPagina({ ...dados, formato: 'story' }, p));
+        // Página mais longa que a animação padrão: o fundo continua andando até o fim da fala.
+        await page.evaluate(`document.querySelector('.pg')?.style.setProperty('--dur', '${duracoes[n].toFixed(2)}s')`);
         await page.evaluate('document.getAnimations().forEach(a => a.pause())');
-        const quadros = Math.round(p.duracao * FPS);
+        const quadros = Math.round(duracoes[n] * FPS);
         for (let f = 0; f < quadros; f++) {
           const ms = Math.round((f / FPS) * 1000);
           await page.evaluate(`document.getAnimations().forEach(a => { a.currentTime = ${ms} })`);
@@ -159,6 +198,12 @@ export async function renderizarVideo(
     });
     ff.stdin.end();
     await terminou;
+    if (locucao.some(Boolean)) {
+      const comVoz = path.join(dir, 'com-voz.mp4');
+      await juntarLocucao(arquivo, comVoz, dir, locucao, duracoes);
+      progresso(1);
+      return await fs.readFile(comVoz);
+    }
     progresso(1);
     return await fs.readFile(arquivo);
   } finally {

@@ -53,6 +53,8 @@ export interface ConfigTabloide {
   whatsapp2: string
   aviso: string
   removeBg: boolean
+  /** Locutor (ElevenLabs) configurado no servidor. */
+  voz: boolean
   cosmos: boolean
   ia: boolean
 }
@@ -151,9 +153,11 @@ export const tabloideApi = {
   exportarPng: (dados: DadosTabloide) =>
     req<{ arquivos: { nome: string; dataUrl: string }[] }>('/tabloides/exportar', json({ dados, saida: 'png' })),
   exportarPdf: (dados: DadosTabloide) => req<Blob>('/tabloides/exportar', json({ dados, saida: 'pdf' }), true),
-  gerarVideo: (dados: DadosTabloide) => req<{ id: string; paginasNoVideo: number }>('/tabloides/video', json({ dados })),
+  roteiroVideo: (dados: DadosTabloide) => req<{ textos: string[] }>('/tabloides/roteiro', json({ dados })),
+  gerarVideo: (dados: DadosTabloide, roteiro?: string[], voz?: string) =>
+    req<{ id: string; paginasNoVideo: number }>('/tabloides/video', json({ dados, roteiro, voz })),
   statusVideo: (id: string) =>
-    req<{ status: 'gerando' | 'pronto' | 'erro'; progresso: number; erro: string | null; tamanho: number }>(`/tabloides/video/${id}`),
+    req<{ status: 'gerando' | 'pronto' | 'erro'; progresso: number; erro: string | null; aviso: string | null; tamanho: number }>(`/tabloides/video/${id}`),
   baixarVideo: (id: string) => req<Blob>(`/tabloides/video/${id}/arquivo`, {}, true),
   legenda: (dados: DadosTabloide, dados_lista?: DadosTabloide[]) =>
     req<{ legenda: string }>('/tabloides/legenda', json({ dados, dados_lista })),

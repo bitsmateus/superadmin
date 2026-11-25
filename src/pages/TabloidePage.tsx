@@ -342,6 +342,7 @@ function Editor() {
           dados={dados}
           chave={chave}
           video={video}
+          vozOk={!!config?.voz}
           onPronto={setVideo}
           onFechar={() => setModal(null)}
           onPublicar={() => {

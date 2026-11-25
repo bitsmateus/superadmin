@@ -18,6 +18,7 @@ export function ModalVideo({
   dados,
   chave,
   video,
+  vozOk,
   onPronto,
   onFechar,
   onPublicar,
@@ -25,6 +26,8 @@ export function ModalVideo({
   dados: DadosTabloide
   chave: string
   video: VideoPronto | null
+  /** Locutor configurado no servidor (ElevenLabs). */
+  vozOk: boolean
   onPronto: (v: VideoPronto) => void
   onFechar: () => void
   onPublicar: () => void
@@ -33,18 +36,25 @@ export function ModalVideo({
   const [progresso, setProgresso] = React.useState<number | null>(atualizado ? 1 : null)
   const [erro, setErro] = React.useState<string | null>(null)
   const paginas = React.useRef(0)
+  // Antes de gerar: escolher se leva locutor e ajustar o que ele vai falar.
+  const [opcoes, setOpcoes] = React.useState(!atualizado && vozOk)
+  const [comLocutor, setComLocutor] = React.useState(true)
+  const [roteiro, setRoteiro] = React.useState<string[] | null>(null)
+  const [aviso, setAviso] = React.useState<string | null>(null)
 
   const gerar = React.useCallback(async () => {
     setErro(null)
     setProgresso(0)
+    setOpcoes(false)
     try {
-      const { id, paginasNoVideo } = await tabloideApi.gerarVideo(dados)
+      const { id, paginasNoVideo } = await tabloideApi.gerarVideo(dados, comLocutor && roteiro ? roteiro : undefined)
       paginas.current = paginasNoVideo
       for (;;) {
         await new Promise((r) => setTimeout(r, 1500))
         const s = await tabloideApi.statusVideo(id)
         if (s.status === 'erro') throw new Error(s.erro ?? 'Não consegui gerar o vídeo.')
         setProgresso(s.progresso)
+        if (s.aviso) setAviso(s.aviso)
         if (s.status === 'pronto') {
           const blob = await tabloideApi.baixarVideo(id)
           onPronto({ id, url: URL.createObjectURL(blob), chave })
@@ -56,10 +66,19 @@ export function ModalVideo({
       setErro((e as Error).message)
       setProgresso(null)
     }
-  }, [dados, chave, onPronto])
+  }, [dados, chave, onPronto, comLocutor, roteiro])
 
   React.useEffect(() => {
-    if (!atualizado) void gerar()
+    if (atualizado) return
+    if (!vozOk) void gerar()
+    else
+      tabloideApi
+        .roteiroVideo(dados)
+        .then((r) => setRoteiro(r.textos))
+        .catch((e: Error) => {
+          setErro(e.message)
+          setOpcoes(false)
+        })
     // só na abertura
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -70,8 +89,9 @@ export function ModalVideo({
         <div className="flex flex-col items-center gap-3">
           <video src={video.url} controls autoPlay loop muted playsInline className="max-h-[60vh] rounded-lg bg-black" />
           <p className="text-center text-xs text-[#9A928B]">
-            Vídeo vertical 1080×1920, sem música.
+            Vídeo vertical 1080×1920{video.id && comLocutor && vozOk ? ', com locutor' : ''}, sem música.
           </p>
+          {aviso && <p className="text-center text-xs text-amber-700">{aviso}</p>}
           <div className="flex flex-wrap justify-center gap-2">
             <button className={btnSecundario} onClick={() => baixarArquivo(video.url, 'tabloide-reels.mp4')}>
               Baixar vídeo
@@ -80,6 +100,35 @@ export function ModalVideo({
               Publicar como Reels
             </button>
           </div>
+        </div>
+      ) : opcoes ? (
+        <div className="flex flex-col gap-3">
+          <label className="flex items-center gap-2 text-sm font-semibold text-[#2A2622]">
+            <input type="checkbox" checked={comLocutor} onChange={(e) => setComLocutor(e.target.checked)} />
+            Com locutor (voz falando os produtos e preços)
+          </label>
+          {comLocutor && (
+            <div className="flex flex-col gap-2">
+              <p className="text-xs text-[#9A928B]">O que o locutor vai falar em cada página do vídeo. Pode editar à vontade.</p>
+              {roteiro === null ? (
+                <p className="py-4 text-center text-xs text-[#9A928B]">Montando o roteiro…</p>
+              ) : (
+                roteiro.map((t, i) => (
+                  <label key={i} className="flex flex-col gap-1 text-xs font-semibold text-[#6B645D]">
+                    Página {i + 1}
+                    <textarea
+                      className={inputCls + ' min-h-[88px] font-normal'}
+                      value={t}
+                      onChange={(e) => setRoteiro((r) => (r ? r.map((x, j) => (j === i ? e.target.value : x)) : r))}
+                    />
+                  </label>
+                ))
+              )}
+            </div>
+          )}
+          <button className={btnPrimario} disabled={comLocutor && roteiro === null} onClick={() => void gerar()}>
+            Gerar vídeo
+          </button>
         </div>
       ) : erro ? (
         <div className="flex flex-col items-center gap-3 py-6 text-center">

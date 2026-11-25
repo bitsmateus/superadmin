@@ -381,6 +381,7 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
   const [newPageOpen, setNewPageOpen] = React.useState(false)
   const [pagesArchiveOpen, setPagesArchiveOpen] = React.useState(false)
   const [newDemandaPageOpen, setNewDemandaPageOpen] = React.useState(false)
+  const [demandaArchiveOpen, setDemandaArchiveOpen] = React.useState(false)
 
   const suporte = withDuplicates(
     [
@@ -858,6 +859,16 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
             {demandasItems.length === 0 && (
               <p className="px-3 py-2 pl-5 text-xs text-foreground/35">Nenhuma aba ainda — use o + pra criar.</p>
             )}
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => setDemandaArchiveOpen(true)}
+                className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 pl-5 text-sm text-foreground/45 transition-colors hover:bg-elevate/[0.03] hover:text-foreground/80"
+              >
+                <Archive className="h-4 w-4 shrink-0 text-foreground/40" />
+                <span>Abas arquivadas</span>
+              </button>
+            )}
           </>
         )}
         </>
@@ -1253,6 +1264,7 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
         onCreated={(id) => { navigate(`/demandas/${id}`); closeOnMobile() }}
         section="demandas"
       />
+      <ArchivedComercialPagesModal open={demandaArchiveOpen} onClose={() => setDemandaArchiveOpen(false)} section="demandas" />
       <ArchivedSupportPagesModal open={supportArchiveOpen} onClose={() => setSupportArchiveOpen(false)} />
     </aside>
   )

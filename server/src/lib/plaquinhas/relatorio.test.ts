@@ -111,3 +111,20 @@ test('relatório "Etiqueta de Gôndola": preço atual, sem fim', () => {
   assert.equal(r.itens[1].preco, '1,99');
   assert.equal(r.itens[1].fim, '');
 });
+
+test('relatório "Prévia dos Produtos - Seção": só entra o que tem PROMO = SIM', () => {
+  const r = lerRelatorio(
+    [
+      'Seção: 1.2 - BISCOITOS/TORRADAS/WAFER',
+      '14733 7898363590411 ARROZITO GUSMAN 100G UN 1 _______ 7,49 ________ 8,00 1 1 6 25-31/08/26 40 NAO',
+      '96547 7891962054100 BISC.COOKIES BAUDUCCO 100G ORIG CX 40 _______ 5,69 ________ 168,00 1 6 25 180-24/10/26 202 SIM',
+      '110606 7899903403413 BISC.CASEIRO QQ JUJU 220GUN 1 _______ 12,99 ________ 27,00 1 5 24-23/11/26 162 SIM',
+    ],
+    HOJE,
+  );
+  assert.equal(r.modelo, 'previa');
+  assert.equal(r.itens.length, 2);
+  assert.equal(r.itens[0].preco, '5,69');
+  assert.equal(r.itens[0].grupo, 'BISCOITOS/TORRADAS/WAFER');
+  assert.equal(r.itens[1].peso, '220G');
+});

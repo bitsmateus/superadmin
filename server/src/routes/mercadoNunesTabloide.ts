@@ -365,7 +365,7 @@ export async function mercadoNunesTabloideRoutes(app: FastifyInstance) {
       return reply.status(400).send({ message: 'Não consegui abrir esse PDF.' });
     }
     if (!lido.itens.length) {
-      return reply.status(422).send({ message: 'Não achei produtos em promoção nesse PDF. Ele é o relatório "Itens em Promoção", "Promoção de Produto", "Produtos por Promoção" ou "Etiqueta de Gôndola" do sistema?' });
+      return reply.status(422).send({ message: 'Não achei produtos em promoção nesse PDF. Ele é o relatório "Itens em Promoção", "Promoção de Produto", "Produtos por Promoção", "Etiqueta de Gôndola" ou "Prévia dos Produtos - Seção" do sistema?' });
     }
     // O relatório em blocos não traz a seção: usa a que o produto já tem nas plaquinhas (vinda de um relatório em tabela).
     const semSecao = [...new Set(lido.itens.filter((i) => !i.grupo).map((i) => i.produtoId))];

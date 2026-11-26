@@ -28,7 +28,7 @@ export interface ItemRelatorio {
 }
 
 export interface ResultadoRelatorio {
-  modelo: 'tabela' | 'blocos' | 'produtos' | 'etiquetas';
+  modelo: 'tabela' | 'blocos' | 'produtos' | 'etiquetas' | 'previa';
   itens: ItemRelatorio[];
   /** Linhas inativas (Ativo = NÃO) que ficaram de fora. */
   inativos: number;
@@ -138,7 +138,13 @@ const RE_ETIQUETA = new RegExp(
   'i',
 );
 
-const semMilhar = (v: string) => v.replace(/\./g, '');
+// "Prévia dos Produtos - Seção": estoque inteiro da seção, `produto EAN NOME TE QE ___ venda ___ ...números... PROMO(SIM|NAO)`.
+// O nome às vezes cola na unidade ("...220GUN 1"). Só o que está com PROMO = SIM vira oferta.
+const RE_PREVIA = new RegExp(
+  String.raw`^(\d+)\s+(\d{1,14})\s+(.+?)\s*[A-Z]{2}\s+\d+(?:,\d+)?\s+_{3,}\s+(${NUM})\s+_{3,}.*?\s(SIM|N.?O)$`,
+);
+
+const semMilhar =(v: string) => v.replace(/\./g, '');
 const dinheiro = (v: string) => {
   const n = Number(semMilhar(v).replace(',', '.'));
   return Number.isFinite(n) ? n : NaN;
@@ -167,6 +173,23 @@ export function lerRelatorio(linhas: string[], hoje: Date = new Date()): Resulta
   };
 
   const ehBlocos = linhas.some((l) => RE_BLOCO.test(l));
+  if (!ehBlocos && linhas.some((l) => RE_PREVIA.test(l))) {
+    let grupo = '';
+    for (const l of linhas) {
+      const s = RE_SECAO.exec(l);
+      if (s) {
+        grupo = s[1].replace(/^[\d.]+\s*-\s*/, '').trim();
+        continue;
+      }
+      const m = RE_PREVIA.exec(l);
+      if (!m || m[5] !== 'SIM') continue;
+      const preco = dinheiro(m[4]);
+      if (!Number.isFinite(preco) || preco <= 0) continue;
+      const { produto, peso } = limparNome(m[3]);
+      juntar({ produtoId: m[1], ean: m[2], grupo, nomeOriginal: m[3].trim(), produto, peso, preco: m[4], precoDe: '', minUnidades: '', inicio: '', fim: '' });
+    }
+    return { modelo: 'previa', itens, inativos, repetidos, vencidos };
+  }
   if (!ehBlocos && linhas.some((l) => RE_ETIQUETA.test(l))) {
     for (const l of linhas) {
       const m = RE_ETIQUETA.exec(l);

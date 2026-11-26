@@ -604,9 +604,16 @@ export async function mercadoNunesTabloideRoutes(app: FastifyInstance) {
           job.aviso = 'Não consegui gerar a voz (ElevenLabs). O vídeo saiu sem locução.';
         }
       }
-      return renderizarVideo(dados, logo, (f) => {
-        job.progresso = f;
-      }, audios, { trilha: req.body?.trilha !== false, estilo });
+      const desenhar = () =>
+        renderizarVideo(dados, logo, (f) => {
+          job.progresso = f;
+        }, audios, { trilha: req.body?.trilha !== false, estilo });
+      // No servidor a 1ª geração às vezes cai e a 2ª passa: tenta de novo sozinho (a voz já está pronta, não gasta outra vez).
+      return desenhar().catch((err: Error) => {
+        console.error('[tabloide] vídeo falhou na 1ª tentativa, tentando de novo:', err.message);
+        job.progresso = 0;
+        return desenhar();
+      });
     })()
       .then((buf) => {
         job.arquivo = buf;

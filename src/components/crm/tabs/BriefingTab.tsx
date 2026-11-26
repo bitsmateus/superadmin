@@ -47,6 +47,7 @@ import { queuesApi, extractQueueId } from '@/api/queues'
 import { chatbotFlowApi } from '@/api/chatbotFlow'
 import { BriefingMeeting } from '../BriefingMeeting'
 import { tenantsApi, sessionTypeForServer } from '@/api/tenants'
+import { criarCanalComAlternativa } from '@/lib/canalComAlternativa'
 import { extractErrorMessage } from '@/api/client'
 import { copyToClipboard } from '@/lib/clipboard'
 import { buildSiteBriefingMessage } from '@/lib/briefingSite'
@@ -1346,14 +1347,13 @@ export function AutomationView({ client }: { client: Client }) {
     const channelName = normalizeWhatsappNumber(number) || number
     setCreatingChannelId(item.id)
     try {
-      // Tipo por servidor: chat → uazapi; app/web → evo.
-      const sessionType = sessionTypeForServer(server)
-      await tenantsApi.createSession(server, {
-        tenant: client.tenantId,
-        name: channelName.slice(0, 60),
-        status: 'DISCONNECTED',
-        type: sessionType,
-      })
+      // Se o servidor não tem o tipo preferido configurado, tenta o outro (ver canalComAlternativa).
+      const tenant = client.tenantId
+      const { tipo: sessionType } = await criarCanalComAlternativa(
+        (type) => tenantsApi.createSession(server, { tenant, name: channelName.slice(0, 60), status: 'DISCONNECTED', type }),
+        sessionTypeForServer(server),
+        (e) => extractErrorMessage(e, 'erro'),
+      )
       const next = setChecklistItem(tree, item.id, true, user)
       db.updateClient(client.id, { deliveryChecklist: next })
       db.addLog(client.id, 'Canal criado', `${channelName} · ${sessionType}`)

@@ -13,6 +13,7 @@ import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { tenantsApi, sessionTypeForServer } from '@/api/tenants'
+import { criarCanalComAlternativa, type TipoDeCanal } from '@/lib/canalComAlternativa'
 import { queuesApi, extractQueueId } from '@/api/queues'
 import { chatbotFlowApi } from '@/api/chatbotFlow'
 import { usersApi, existingUserEmails, friendlyUserError } from '@/api/users'
@@ -614,17 +615,20 @@ async function runStep(key: string, ctx: StepCtx): Promise<string | undefined> {
     }
 
     let createdChannels = 0
+    // O tipo que o servidor aceitou: se o preferido não está configurado nele, tenta o outro (ver canalComAlternativa).
+    let tipoUsado: TipoDeCanal = sessionTypeForServer(server)
     const channelFailures: string[] = []
     for (let idx = 0; idx < channelNames.length; idx++) {
       const name = channelNames[idx].slice(0, 60)
       try {
         // eslint-disable-next-line no-await-in-loop
-        const session = await tenantsApi.createSession(server, {
-          tenant: tenantId,
-          name,
-          status: 'DISCONNECTED',
-          type: sessionTypeForServer(server),
-        })
+        const criado = await criarCanalComAlternativa(
+          (type) => tenantsApi.createSession(server, { tenant: tenantId, name, status: 'DISCONNECTED', type }),
+          tipoUsado,
+          (e) => extractErrorMessage(e, 'falha'),
+        )
+        tipoUsado = criado.tipo
+        const session = criado.resultado
         const sid = captureFromSession(session)
         // O primeiro canal é crítico: é ele que gera a API + token.
         if (idx === 0 && sid == null) {
@@ -646,7 +650,7 @@ async function runStep(key: string, ctx: StepCtx): Promise<string | undefined> {
       tenantApiToken: prov.apiToken || undefined,
       deliveryChecklist: setChecklistItem(currentChecklist(), 'channels_created', true, 'Sistema'),
     })
-    const base = `${createdChannels} canal(is) · ${sessionTypeForServer(server)}`
+    const base = `${createdChannels} canal(is) · ${tipoUsado}`
     return channelFailures.length > 0
       ? `${base} · ${channelFailures.length} falhou(ram)`
       : base

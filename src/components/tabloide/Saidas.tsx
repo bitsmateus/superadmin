@@ -137,7 +137,7 @@ export function ModalVideo({
           </div>
           {estilo === 'black' && (
             <p className="text-[11px] text-[#9A928B]">
-              Abertura com a logo, até 8 produtos (um por vez, na ordem da lista) e fechamento. O título do tabloide vira o texto das faixas.
+              Abertura com a logo 3D Black Friday Nunes, até 8 produtos (um por vez, na ordem da lista) e fechamento.
             </p>
           )}
           <label className="flex items-center gap-2 text-sm font-semibold text-[#2A2622]">

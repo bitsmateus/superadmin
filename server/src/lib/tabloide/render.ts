@@ -101,6 +101,27 @@ function caminhoFfmpeg(): string {
 
 const FPS = 30;
 
+/** Abre o clipe em um JPEG por quadro, pra entrar no mesmo cano das páginas em HTML. */
+async function quadrosDoClipe(clipe: string, pasta: string): Promise<string[]> {
+  await fs.mkdir(pasta);
+  const args = ['-loglevel', 'error', '-i', clipe, '-vf', `scale=1080:1920,fps=${FPS}`, '-q:v', '3', path.join(pasta, '%04d.jpg')];
+  await new Promise<void>((resolve, reject) => {
+    const ff = spawn(caminhoFfmpeg(), args, { stdio: 'ignore' });
+    ff.on('error', reject);
+    ff.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`ffmpeg (abertura) saiu com ${code}`))));
+  });
+  return (await fs.readdir(pasta)).sort().map((f) => path.join(pasta, f));
+}
+
+/** Fala mais longa que o clipe: vai e volta no último 0,8 s, pra brasas e faixas não congelarem. */
+function quadroNoTempo(f: number, total: number): number {
+  if (f < total) return f;
+  const volta = Math.min(24, total - 1);
+  if (!volta) return 0;
+  const k = (f - total) % (2 * volta);
+  return k < volta ? total - 2 - k : total - volta + (k - volta);
+}
+
 /**
  * Trilha de fundo gerada na hora (sem arquivo, sem direitos autorais): arpejo de pentatônica sobre
  * baixo em C–Am–F–G, 120 bpm. Quem quiser música própria aponta TABLOIDE_TRILHA pra um mp3 no servidor.
@@ -198,7 +219,7 @@ export async function renderizarVideo(
   const dadosStory = { ...dados, formato: 'story' as const };
   const paginas: PaginaVideo[] =
     extras.estilo === 'black'
-      ? paginasBlack(dados, logoUrl)
+      ? paginasBlack(dados)
       : montarPaginas(dadosStory, logoUrl, { animado: true })
           .slice(0, MAX_PAGINAS_VIDEO)
           .map((p, n) => ({
@@ -244,6 +265,16 @@ export async function renderizarVideo(
       const page = await novaAba(browser, 1080, 1920);
       let feitos = 0;
       for (const [n, p] of paginas.entries()) {
+        if (p.clipe) {
+          const quadros = Math.round(duracoes[n] * FPS);
+          const originais = await quadrosDoClipe(p.clipe, path.join(dir, `clipe-${n}`));
+          for (let f = 0; f < quadros; f++) {
+            await escrever(await fs.readFile(originais[quadroNoTempo(f, originais.length)]));
+            feitos++;
+            if (feitos % 15 === 0) progresso(feitos / totalQuadros);
+          }
+          continue;
+        }
         await carregar(page, p.doc);
         // Página mais longa que a animação padrão: o fundo continua andando até o fim da fala. --t0 = quanto do vídeo
         // já passou, pra fogo, brasas e faixas (que não reiniciam entre páginas) seguirem de onde pararam.

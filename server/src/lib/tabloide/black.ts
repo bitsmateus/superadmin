@@ -1,14 +1,19 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { esc, type DadosTabloide, type ItemTabloide } from './layout.js';
 
 /**
- * Segundo estilo de vídeo, "Black Friday" (referência: Black 01): abertura com a logo, um produto por vez
+ * Segundo estilo de vídeo, "Black Friday" (referência: Black 01): abertura com a logo 3D, um produto por vez
  * (foto à esquerda, estrela laranja com o preço, nome ao lado), fundo escuro com brasas, fogo e faixas, e um
- * fechamento com a logo e os produtos. Tudo em HTML/CSS: o servidor pausa as animações e tira um print por quadro.
+ * fechamento com a logo e os produtos. A abertura é o trecho 3D do próprio Black 01 (assets); o resto é HTML/CSS:
+ * o servidor pausa as animações e tira um print por quadro.
  */
 
 export interface PaginaVideo {
-  /** Documento HTML completo (1080×1920). */
+  /** Documento HTML completo (1080×1920). Vazio quando a página é um clipe. */
   doc: string;
+  /** Vídeo pronto (1080×1920) que entra no lugar do HTML. */
+  clipe?: string;
   /** Duração padrão, em segundos (a fala do locutor pode alongar). */
   duracao: number;
   /** Momentos (s, dentro da página) em que toca o "ding". */
@@ -16,12 +21,25 @@ export interface PaginaVideo {
 }
 
 export const MAX_PRODUTOS_BLACK = 8;
-const DUR_INTRO = 4.4;
+const DUR_INTRO = 3; // duração do clipe de abertura
 const DUR_PRODUTO = 4.4;
 const DUR_FINAL = 4.2;
 
 /** Quantas páginas o vídeo terá (abertura + produtos + fechamento). */
 export const paginasDoBlack = (dados: DadosTabloide) => 2 + Math.min(dados.itens.length, MAX_PRODUTOS_BLACK);
+
+const asset = (nome: string) => path.resolve(process.cwd(), 'assets', nome);
+
+let logoCache = '';
+/** Logo 3D "Black Friday Nunes" (fundo transparente). */
+function logo3d(): string {
+  logoCache ||= `data:image/png;base64,${readFileSync(asset('mercadonunes-black-logo.png')).toString('base64')}`;
+  return logoCache;
+}
+const logoHtml = () => `<img class="logo" src="${logo3d()}" alt="">`;
+
+/** Texto das faixas (o mesmo que aparece na abertura). */
+const FAIXA = 'BLACK FRIDAY';
 
 const FONTES = '<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700;800;900&display=swap" rel="stylesheet">';
 
@@ -48,8 +66,7 @@ html,body{width:1080px;height:1920px;overflow:hidden;background:#161414}
 .pct{position:absolute;font-weight:900;color:#ff7a00;text-shadow:0 0 28px rgba(255,110,0,.8),0 6px 0 #a83f00;line-height:1}
 .pct.a{right:30px;top:300px;font-size:130px;transform:rotate(12deg)}
 .pct.c{left:-10px;bottom:330px;font-size:300px;transform:rotate(-14deg)}
-.logo{position:absolute;left:50%;top:140px;height:250px;max-width:620px;transform:translateX(-50%);object-fit:contain;filter:drop-shadow(0 10px 24px rgba(0,0,0,.6))}
-.logo-txt{position:absolute;left:0;right:0;top:170px;text-align:center;font-weight:900;font-size:110px;line-height:1;color:#ff7a00;text-shadow:0 8px 0 #7a2c00}
+.logo{position:absolute;left:50%;top:245px;height:330px;max-width:620px;transform:translateX(-50%);object-fit:contain;filter:drop-shadow(0 10px 24px rgba(0,0,0,.6))}
 
 /* produto */
 @keyframes fotoIn{0%{transform:translateX(-130%) scale(.8);opacity:0}100%{transform:none;opacity:1}}
@@ -73,20 +90,12 @@ html,body{width:1080px;height:1920px;overflow:hidden;background:#161414}
 .preco .cent{font-weight:800;font-size:64px}
 .preco .un{font-weight:700;font-size:30px;margin-bottom:14px}
 
-/* abertura / fechamento */
-@keyframes aberturaLogo{0%{transform:translateX(-50%) translateY(420px) scale(.5);opacity:0}14%{transform:translateX(-50%) translateY(420px) scale(1.5);opacity:1}48%{transform:translateX(-50%) translateY(420px) scale(1.6);opacity:1}72%,100%{transform:translateX(-50%)}}
-@keyframes cobre{0%,40%{opacity:1}62%,100%{opacity:0}}
+/* fechamento */
 @keyframes luz{0%{opacity:0;transform:scale(.4)}15%{opacity:.95;transform:scale(1)}40%,100%{opacity:0;transform:scale(1.6)}}
 @keyframes textoIn{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:none}}
-.cobre{position:absolute;inset:0;background:radial-gradient(70% 50% at 50% 50%,#2a2523 0%,#0c0b0b 100%);animation:cobre 4.4s linear both}
-.luz{position:absolute;left:50%;top:1010px;width:1100px;height:1100px;margin:-550px 0 0 -550px;background:radial-gradient(circle,rgba(255,170,60,.95) 0%,rgba(255,110,0,.35) 35%,transparent 65%);animation:luz 4.4s ease-out both;mix-blend-mode:screen}
-.abre .logo{animation:aberturaLogo 4.4s cubic-bezier(.3,.8,.3,1) both;transform-origin:50% 0}
-.abre .frase{position:absolute;left:0;right:0;top:520px;text-align:center;animation:textoIn .6s ease-out 3s both}
-.frase b{display:block;font-weight:800;font-size:44px;letter-spacing:7px}
-.frase i{display:block;font-style:normal;font-weight:600;font-size:40px;letter-spacing:3px;margin-top:34px;line-height:1.3}
-.frase i em{font-style:normal;color:#ff7a00;font-weight:800}
+.luz{position:absolute;left:50%;width:1100px;height:1100px;margin:-550px 0 0 -550px;background:radial-gradient(circle,rgba(255,170,60,.95) 0%,rgba(255,110,0,.35) 35%,transparent 65%);animation:luz 4.4s ease-out both;mix-blend-mode:screen}
 @keyframes finalLogo{0%{transform:translateX(-50%) scale(.6);opacity:0}100%{transform:translateX(-50%) scale(1);opacity:1}}
-.fim .logo{top:230px;height:400px;max-width:760px;animation:finalLogo .8s cubic-bezier(.2,.9,.3,1.15) both}
+.fim .logo{top:240px;height:480px;max-width:760px;animation:finalLogo .8s cubic-bezier(.2,.9,.3,1.15) both}
 .fim .luz{top:560px;animation-duration:2.2s}
 .pilha img{position:absolute;object-fit:contain;filter:drop-shadow(0 16px 20px rgba(0,0,0,.6));animation:sobeIn .6s ease-out both}
 .val{position:absolute;left:0;right:0;top:1500px;text-align:center;font-weight:800;font-size:40px;letter-spacing:3px;animation:textoIn .6s ease-out 1.6s both}
@@ -125,19 +134,14 @@ function estrelaSvg(): string {
 
 const UNIDADE: Record<string, string> = { '': 'UND', un: 'UND', kg: 'KG', '100g': '100G', bandeja: 'BDJ' };
 
-function logoHtml(logoUrl: string, titulo: string): string {
-  return logoUrl ? `<img class="logo" src="${esc(logoUrl)}" alt="">` : `<div class="logo-txt">${esc(titulo)}</div>`;
-}
-
 const doc = (corpo: string) => `<!doctype html><html><head><meta charset="utf-8">${FONTES}<style>${CSS}</style></head><body>${corpo}</body></html>`;
 
-function paginaProduto(it: ItemTabloide, dados: DadosTabloide, logoUrl: string, titulo: string): PaginaVideo {
+function paginaProduto(it: ItemTabloide): PaginaVideo {
   const [inteiro, cent = ''] = it.preco.split(',');
   const nome = esc([it.nome, it.detalhe && `(${it.detalhe})`].filter(Boolean).join(' '));
   const foto = it.fotoUrl ? `<div class="foto"><img src="${esc(it.fotoUrl)}" alt=""></div>` : '';
-  void dados;
   const corpo =
-    `<div class="pg" style="--dur:${DUR_PRODUTO}s">${fundo(titulo)}${logoHtml(logoUrl, titulo)}` +
+    `<div class="pg" style="--dur:${DUR_PRODUTO}s">${fundo(FAIXA)}${logoHtml()}` +
     `<div class="cena">${foto}<div class="nome">${nome}</div>` +
     `<div class="estrela">${estrelaSvg()}<div class="txt"><div class="oferta">OFERTA</div>` +
     `<div class="preco"><span class="rs">R$</span><span class="int">${esc(inteiro)}</span>` +
@@ -146,16 +150,8 @@ function paginaProduto(it: ItemTabloide, dados: DadosTabloide, logoUrl: string, 
 }
 
 /** Páginas do vídeo no estilo Black Friday: abertura, um produto por página e fechamento. */
-export function paginasBlack(dados: DadosTabloide, logoUrl: string): PaginaVideo[] {
-  const titulo = (dados.titulo || 'BLACK FRIDAY').toUpperCase();
+export function paginasBlack(dados: DadosTabloide): PaginaVideo[] {
   const itens = dados.itens.slice(0, MAX_PRODUTOS_BLACK);
-  const linha1 = esc((dados.subtitulo || 'OFERTAS IMBATÍVEIS!').toUpperCase());
-
-  const abertura = doc(
-    `<div class="pg abre" style="--dur:${DUR_INTRO}s">${fundo(titulo)}<div class="cobre"></div>${logoHtml(logoUrl, titulo)}` +
-      `<div class="frase"><b>${linha1}</b><i><em>DESCONTOS</em><br>EM TODOS OS SETORES</i></div>` +
-      `<div class="luz"></div></div>`,
-  );
 
   const lugares = [
     { x: 40, y: 1080, h: 360 }, { x: 640, y: 1070, h: 380 }, { x: 250, y: 1000, h: 420 },
@@ -168,13 +164,13 @@ export function paginasBlack(dados: DadosTabloide, logoUrl: string): PaginaVideo
     .join('');
   const validade = dados.validade ? `<div class="val">${esc(dados.validade.toUpperCase())}</div>` : '';
   const fechamento = doc(
-    `<div class="pg fim" style="--dur:${DUR_FINAL}s">${fundo(titulo)}${logoHtml(logoUrl, titulo)}<div class="luz"></div>` +
+    `<div class="pg fim" style="--dur:${DUR_FINAL}s">${fundo(FAIXA)}${logoHtml()}<div class="luz"></div>` +
       `<div class="pilha">${pilha}</div>${validade}</div>`,
   );
 
   return [
-    { doc: abertura, duracao: DUR_INTRO, dings: [0.5, 3.0] },
-    ...itens.map((it) => paginaProduto(it, dados, logoUrl, titulo)),
+    { doc: '', clipe: asset('mercadonunes-black-abertura.mp4'), duracao: DUR_INTRO, dings: [0.15, 1.45] },
+    ...itens.map(paginaProduto),
     { doc: fechamento, duracao: DUR_FINAL, dings: [0.4] },
   ];
 }

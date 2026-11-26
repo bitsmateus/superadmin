@@ -61,6 +61,30 @@ export interface ConfigTabloide {
 
 export type EstiloVideo = 'tabloide' | 'black'
 
+export interface MusicaSalva {
+  id: string
+  nome: string
+  created_at: string
+}
+
+/** Volumes em %: música 0–100, voz 0–150, efeitos 0–100. */
+export interface VolumesVideo {
+  musica: number
+  voz: number
+  efeitos: number
+}
+
+export interface OpcoesVideo {
+  roteiro?: string[]
+  voz?: string
+  estilo: EstiloVideo
+  musicaId?: string
+  fundoId?: string
+  volumes: VolumesVideo
+}
+
+export const urlDaMusica = (id: string) => `${BASE}/video/musicas/${id}/audio`
+
 export interface VozLocutor {
   id: string
   nome: string
@@ -163,8 +187,10 @@ export const tabloideApi = {
   exportarPdf: (dados: DadosTabloide) => req<Blob>('/tabloides/exportar', json({ dados, saida: 'pdf' }), true),
   vozes: () => req<{ vozes: VozLocutor[] }>('/tabloides/vozes'),
   roteiroVideo: (dados: DadosTabloide, estilo: EstiloVideo = 'tabloide') => req<{ textos: string[] }>('/tabloides/roteiro', json({ dados, estilo })),
-  gerarVideo: (dados: DadosTabloide, roteiro?: string[], voz?: string, trilha = true, estilo: EstiloVideo = 'tabloide') =>
-    req<{ id: string; paginasNoVideo: number }>('/tabloides/video', json({ dados, roteiro, voz, trilha, estilo })),
+  gerarVideo: (dados: DadosTabloide, opcoes: OpcoesVideo) => req<{ id: string; paginasNoVideo: number }>('/tabloides/video', json({ dados, ...opcoes })),
+  musicas: () => req<{ musicas: MusicaSalva[] }>('/video/musicas'),
+  enviarMusica: (arquivo: string, nome: string) => req<MusicaSalva>('/video/musicas', json({ arquivo, nome })),
+  removerMusica: (id: string) => req<{ ok: true }>(`/video/musicas/${id}`, { method: 'DELETE' }),
   statusVideo: (id: string) =>
     req<{ status: 'gerando' | 'pronto' | 'erro'; progresso: number; erro: string | null; aviso: string | null; tamanho: number }>(`/tabloides/video/${id}`),
   baixarVideo: (id: string) => req<Blob>(`/tabloides/video/${id}/arquivo`, {}, true),

@@ -13,7 +13,8 @@ import { testarConexao } from '../lib/tabloide/conexao.js';
 import { separarPorSecao } from '../lib/tabloide/promocao.js';
 import { lerPdfDePromocao } from '../lib/plaquinhas/relatorio.js';
 import { prepararFoto, removeBgDisponivel, type ModoRecorte } from '../lib/tabloide/recorte.js';
-import { MAX_PAGINAS_VIDEO, renderizarImagens, renderizarPdf, renderizarVideo } from '../lib/tabloide/render.js';
+import { MAX_PAGINAS_VIDEO, lerVolumes, renderizarImagens, renderizarPdf, renderizarVideo, type Volumes } from '../lib/tabloide/render.js';
+import { prepararMusica } from '../lib/tabloide/musica.js';
 import { gerarVozes, listarVozes, motivoDaVoz, roteiroBlack, roteiroPadrao, vozDisponivel } from '../lib/tabloide/locucao.js';
 import { MAX_PRODUTOS_BLACK, paginasDoBlack } from '../lib/tabloide/black.js';
 
@@ -577,9 +578,46 @@ export async function mercadoNunesTabloideRoutes(app: FastifyInstance) {
     return { textos: req.body?.estilo === 'black' ? roteiroBlack(dados, MAX_PRODUTOS_BLACK) : roteiroPadrao(dados, MAX_PAGINAS_VIDEO) };
   });
 
+  // ── Músicas de fundo dos vídeos ───────────────────────────────────────────
+
+  const idDe = (x: unknown) => (typeof x === 'string' && /^[0-9a-f-]{36}$/i.test(x) ? x : null);
+
+  app.get(`${BASE}/video/musicas`, async () => ({
+    musicas: await query('SELECT id, nome, created_at FROM mn_videos_musicas ORDER BY created_at DESC LIMIT 40'),
+  }));
+
+  app.get<{ Params: { id: string } }>(`${BASE}/video/musicas/:id/audio`, async (req, reply) => {
+    const r = idDe(req.params.id) ? await queryOne<{ audio: Buffer }>('SELECT audio FROM mn_videos_musicas WHERE id = $1', [req.params.id]) : null;
+    if (!r) return reply.status(404).send({ message: 'Música não encontrada.' });
+    return reply.header('Content-Type', 'audio/mpeg').header('Cache-Control', 'public, max-age=31536000, immutable').send(r.audio);
+  });
+
+  app.post<{ Body: { arquivo?: string; nome?: string } }>(`${BASE}/video/musicas`, async (req, reply) => {
+    const base64 = /^data:[^,]*;base64,(.+)$/s.exec(String(req.body?.arquivo ?? ''))?.[1];
+    if (!base64) return reply.status(400).send({ message: 'Arquivo inválido.' });
+    const total = await queryOne<{ n: string }>('SELECT count(*) AS n FROM mn_videos_musicas');
+    if (Number(total?.n) >= 40) return reply.status(400).send({ message: 'Já são 40 músicas salvas. Apague alguma antes.' });
+    let mp3: Buffer;
+    try {
+      mp3 = await prepararMusica(Buffer.from(base64, 'base64'));
+    } catch (err) {
+      return reply.status(400).send({ message: (err as Error).message });
+    }
+    const r = await queryOne('INSERT INTO mn_videos_musicas (nome, audio) VALUES ($1, $2) RETURNING id, nome, created_at', [
+      texto(req.body?.nome, 60).trim() || 'Música',
+      mp3,
+    ]);
+    return reply.status(201).send(r);
+  });
+
+  app.delete<{ Params: { id: string } }>(`${BASE}/video/musicas/:id`, async (req) => {
+    if (idDe(req.params.id)) await query('DELETE FROM mn_videos_musicas WHERE id = $1', [req.params.id]);
+    return { ok: true };
+  });
+
   app.get(`${BASE}/tabloides/vozes`, async () => ({ vozes: await listarVozes() }));
 
-  app.post<{ Body: { dados?: Partial<DadosTabloide>; roteiro?: string[]; voz?: string; trilha?: boolean; estilo?: string } }>(`${BASE}/tabloides/video`, async (req, reply) => {
+  app.post<{ Body: { dados?: Partial<DadosTabloide>; roteiro?: string[]; voz?: string; estilo?: string; musicaId?: string; fundoId?: string; volumes?: Partial<Volumes> } }>(`${BASE}/tabloides/video`, async (req, reply) => {
     limparVideos();
     if ([...videos.values()].filter((j) => j.status === 'gerando').length >= 2) {
       return reply.status(429).send({ message: 'Já tem vídeo sendo gerado. Espere terminar.' });
@@ -593,6 +631,11 @@ export async function mercadoNunesTabloideRoutes(app: FastifyInstance) {
     const estilo = req.body?.estilo === 'black' ? 'black' : 'tabloide';
     const falas = Array.isArray(req.body?.roteiro) && vozDisponivel() ? req.body.roteiro.slice(0, MAX_PRODUTOS_BLACK + 2).map((t) => texto(t, 2500)) : [];
     const voz = typeof req.body?.voz === 'string' ? req.body.voz : undefined;
+    const volumes = lerVolumes(req.body?.volumes);
+    const musicaId = idDe(req.body?.musicaId);
+    const musica = musicaId ? (await queryOne<{ audio: Buffer }>('SELECT audio FROM mn_videos_musicas WHERE id = $1', [musicaId]))?.audio ?? null : null;
+    const fundoId = idDe(req.body?.fundoId);
+    const fundo = fundoId ? fundoValido((await queryOne<{ imagem: string }>('SELECT imagem FROM mn_tabloide_fundos WHERE id = $1', [fundoId]))?.imagem ?? '') : '';
     void (async () => {
       // Voz primeiro (rápida); se falhar, o vídeo sai sem locução em vez de não sair.
       let audios: (Buffer | null)[] = [];
@@ -607,7 +650,7 @@ export async function mercadoNunesTabloideRoutes(app: FastifyInstance) {
       const desenhar = () =>
         renderizarVideo(dados, logo, (f) => {
           job.progresso = f;
-        }, audios, { trilha: req.body?.trilha !== false, estilo });
+        }, audios, { estilo, musica, volumes, fundo });
       // No servidor a 1ª geração às vezes cai e a 2ª passa: tenta de novo sozinho (a voz já está pronta, não gasta outra vez).
       return desenhar().catch((err: Error) => {
         console.error('[tabloide] vídeo falhou na 1ª tentativa, tentando de novo:', err.message);

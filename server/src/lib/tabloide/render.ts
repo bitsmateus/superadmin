@@ -99,7 +99,7 @@ export async function renderizarPdf(dados: DadosTabloide, logoUrl: string): Prom
   });
 }
 
-function caminhoFfmpeg(): string {
+export function caminhoFfmpeg(): string {
   if (process.env.FFMPEG_PATH) return process.env.FFMPEG_PATH;
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -134,51 +134,56 @@ function quadroNoTempo(f: number, total: number): number {
   return k < volta ? total - 2 - k : total - volta + (k - volta);
 }
 
-/**
- * Trilha de fundo gerada na hora (sem arquivo, sem direitos autorais): arpejo de pentatônica sobre
- * baixo em C–Am–F–G, 120 bpm. Quem quiser música própria aponta TABLOIDE_TRILHA pra um mp3 no servidor.
- */
-const TRILHA_SINTETICA =
-  "st(0,floor(t*4));st(1,mod(ld(0),8));st(2,floor(mod(t/4,4)));" +
-  "st(3,if(lt(ld(2),1),0,if(lt(ld(2),2),-3,if(lt(ld(2),3),-7,-5))));" +
-  "st(4,if(lt(ld(1),1),0,if(lt(ld(1),2),4,if(lt(ld(1),3),7,if(lt(ld(1),4),9,if(lt(ld(1),5),12,if(lt(ld(1),6),9,if(lt(ld(1),7),7,4))))))));" +
-  "0.5*sin(2*PI*523.25*pow(2,ld(4)/12)*t)*exp(-5*mod(t*4,1))+0.35*sin(2*PI*130.81*pow(2,ld(3)/12)*t)*(0.6+0.4*exp(-3*mod(t*2,1)))";
+/** Volumes escolhidos na tela, em %: música 0–100, voz 0–150, efeitos 0–100. */
+export interface Volumes {
+  musica: number;
+  voz: number;
+  efeitos: number;
+}
+
+export const VOLUMES_PADRAO: Volumes = { musica: 25, voz: 100, efeitos: 50 };
+
+export function lerVolumes(v: Partial<Volumes> | undefined): Volumes {
+  const n = (x: unknown, padrao: number, max: number) => (typeof x === 'number' && Number.isFinite(x) ? Math.max(0, Math.min(max, x)) : padrao);
+  return { musica: n(v?.musica, VOLUMES_PADRAO.musica, 100), voz: n(v?.voz, VOLUMES_PADRAO.voz, 150), efeitos: n(v?.efeitos, VOLUMES_PADRAO.efeitos, 100) };
+}
 
 interface OpcoesAudio {
-  trilha: boolean;
+  /** Música enviada pelo mercado (mp3); sem ela o vídeo não tem fundo musical. */
+  musica: Buffer | null;
+  volumes: Volumes;
   /** Segundos (no vídeo) em que cada produto entra na tela: ganha um "ding". */
   dings: number[];
 }
 
 /**
- * Monta a faixa de áudio do vídeo: falas no início de cada página, "ding" na entrada de cada produto e
- * trilha de fundo (mais baixa quando tem voz). Troca a faixa muda do vídeo por essa.
+ * Monta a faixa de áudio do vídeo: falas no início de cada página, "ding" na entrada de cada produto e a
+ * música escolhida no fundo. Devolve false se não há nada pra tocar (o vídeo fica mudo).
  */
-async function juntarAudio(video: string, saida: string, dir: string, locucao: (Buffer | null)[], duracoes: number[], op: OpcoesAudio): Promise<void> {
+async function juntarAudio(video: string, saida: string, dir: string, locucao: (Buffer | null)[], duracoes: number[], op: OpcoesAudio): Promise<boolean> {
   const total = duracoes.reduce((a, b) => a + b, 0);
+  const estereo = 'aformat=sample_rates=44100:channel_layouts=stereo';
   const entradas: string[] = ['-i', video];
   const filtros: string[] = [];
   const mixar: string[] = [];
   let inicio = 0;
   let k = 0;
-  let temVoz = false;
   for (const [i, fala] of locucao.entries()) {
-    if (fala && i < duracoes.length) {
+    if (fala && i < duracoes.length && op.volumes.voz > 0) {
       const f = path.join(dir, `fala-${i}.mp3`);
       await fs.writeFile(f, fala);
       entradas.push('-i', f);
       k++;
-      temVoz = true;
       const ms = Math.round((inicio + 0.3) * 1000);
-      filtros.push(`[${k}:a]adelay=${ms}|${ms},volume=1.6[v${k}]`);
+      filtros.push(`[${k}:a]${estereo},adelay=${ms}|${ms},volume=${((1.6 * op.volumes.voz) / 100).toFixed(3)}[v${k}]`);
       mixar.push(`[v${k}]`);
     }
     inicio += duracoes[i] ?? 0;
   }
-  if (op.dings.length) {
+  if (op.dings.length && op.volumes.efeitos > 0) {
     const n = op.dings.length;
     const saidas = op.dings.map((_, j) => `[g${j}]`).join('');
-    const base = 'sine=frequency=1568:duration=0.45,afade=t=out:st=0.05:d=0.4,volume=0.35';
+    const base = `sine=frequency=1568:duration=0.45,afade=t=out:st=0.05:d=0.4,volume=${((0.35 * op.volumes.efeitos) / 100).toFixed(3)},${estereo}`;
     filtros.push(n === 1 ? `${base}[g0]` : `${base},asplit=${n}${saidas}`);
     op.dings.forEach((t, j) => {
       const ms = Math.round(t * 1000);
@@ -186,21 +191,17 @@ async function juntarAudio(video: string, saida: string, dir: string, locucao: (
       mixar.push(`[d${j}]`);
     });
   }
-  if (op.trilha) {
-    const vol = temVoz ? 0.16 : 0.32;
-    const propria = process.env.TABLOIDE_TRILHA;
-    let temArquivo = false;
-    if (propria) temArquivo = await fs.access(propria).then(() => true, () => false);
-    if (temArquivo) {
-      entradas.push('-stream_loop', '-1', '-t', total.toFixed(2), '-i', propria as string);
-      filtros.push(`[${k + 1}:a]volume=${vol}[mus]`);
-    } else {
-      filtros.push(`aevalsrc='${TRILHA_SINTETICA}':s=44100:d=${total.toFixed(2)},volume=${vol}[mus]`);
-    }
+  if (op.musica && op.volumes.musica > 0) {
+    const f = path.join(dir, 'musica.mp3');
+    await fs.writeFile(f, op.musica);
+    // Música curta repete até o fim do vídeo.
+    entradas.push('-stream_loop', '-1', '-t', total.toFixed(2), '-i', f);
+    filtros.push(`[${k + 1}:a]${estereo},volume=${(op.volumes.musica / 100).toFixed(3)}[mus]`);
     mixar.push('[mus]');
   }
+  if (!mixar.length) return false;
   const fadeIni = Math.max(0, total - 1.2).toFixed(2);
-  filtros.push(`${mixar.join('')}amix=inputs=${mixar.length}:normalize=0:duration=longest,atrim=0:${total.toFixed(2)},afade=t=out:st=${fadeIni}:d=1.2[a]`);
+  filtros.push(`${mixar.join('')}amix=inputs=${mixar.length}:normalize=0:duration=longest,alimiter=limit=0.95,apad,atrim=0:${total.toFixed(2)},afade=t=out:st=${fadeIni}:d=1.2[a]`);
   const args = [...entradas, '-filter_complex', filtros.join(';'), '-map', '0:v', '-map', '[a]', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', '-y', saida];
   await new Promise<void>((resolve, reject) => {
     const ff = spawn(caminhoFfmpeg(), args, { stdio: ['ignore', 'ignore', 'pipe'] });
@@ -211,6 +212,7 @@ async function juntarAudio(video: string, saida: string, dir: string, locucao: (
     ff.on('error', reject);
     ff.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`ffmpeg (áudio) saiu com ${code}: ${e.slice(-300)}`))));
   });
+  return true;
 }
 export const MAX_PAGINAS_VIDEO = 4;
 
@@ -225,13 +227,13 @@ export async function renderizarVideo(
   progresso: (fracao: number) => void = () => undefined,
   /** Locução (mp3) por página: a página dura o tempo da fala + um respiro, e o áudio entra no início dela. */
   locucao: (Buffer | null)[] = [],
-  /** Trilha de fundo + "ding" na entrada de cada produto (ligado por padrão). */
-  extras: { trilha?: boolean; estilo?: 'tabloide' | 'black' } = {},
+  /** Música de fundo, volumes e foto de fundo escolhidos na tela. */
+  extras: { estilo?: 'tabloide' | 'black'; musica?: Buffer | null; volumes?: Volumes; fundo?: string } = {},
 ): Promise<Buffer> {
-  const dadosStory = { ...dados, formato: 'story' as const };
+  const dadosStory = { ...dados, formato: 'story' as const, ...(extras.fundo ? { fundoUrl: extras.fundo } : {}) };
   const paginas: PaginaVideo[] =
     extras.estilo === 'black'
-      ? paginasBlack(dados)
+      ? paginasBlack(dados, extras.fundo)
       : montarPaginas(dadosStory, logoUrl, { animado: true })
           .slice(0, MAX_PAGINAS_VIDEO)
           .map((p, n) => ({
@@ -340,17 +342,16 @@ export async function renderizarVideo(
     });
     ff.stdin.end();
     await terminou;
-    if (locucao.some(Boolean) || extras.trilha) {
-      const comVoz = path.join(dir, 'com-voz.mp4');
-      const dings: number[] = [];
-      let t0 = 0;
-      for (const [n, p] of paginas.entries()) {
-        p.dings.forEach((d) => dings.push(t0 + d));
-        t0 += duracoes[n] ?? 0;
-      }
-      await juntarAudio(arquivo, comVoz, dir, locucao, duracoes, { trilha: !!extras.trilha, dings: extras.trilha ? dings : [] });
+    const comSom = path.join(dir, 'com-som.mp4');
+    const dings: number[] = [];
+    let inicio = 0;
+    for (const [n, p] of paginas.entries()) {
+      p.dings.forEach((d) => dings.push(inicio + d));
+      inicio += duracoes[n] ?? 0;
+    }
+    if (await juntarAudio(arquivo, comSom, dir, locucao, duracoes, { musica: extras.musica ?? null, volumes: extras.volumes ?? VOLUMES_PADRAO, dings })) {
       progresso(1);
-      return await fs.readFile(comVoz);
+      return await fs.readFile(comSom);
     }
     progresso(1);
     return await fs.readFile(arquivo);

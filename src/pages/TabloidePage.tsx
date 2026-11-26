@@ -32,6 +32,7 @@ import { ImportarPromocao } from '@/components/tabloide/ImportarPromocao'
 import { EscolherMascote } from '@/components/tabloide/EscolherMascote'
 import { ModalBaixarEmMassa, ModalPostarEmMassa } from '@/components/tabloide/EmMassa'
 import { ModalLegenda, ModalPublicar, ModalVideo, type VideoPronto } from '@/components/tabloide/Saidas'
+import { AbaVideo } from '@/components/tabloide/AbaVideo'
 import {
   DADOS_VAZIOS,
   FONTES_PRECO,
@@ -79,7 +80,7 @@ export function TabloidePage() {
   return <Editor />
 }
 
-type Aba = 'montar' | 'catalogo' | 'historico' | 'templates'
+type Aba = 'montar' | 'video' | 'catalogo' | 'historico' | 'templates'
 
 /** As fontes do tabloide também na página (miniaturas dos modelos), não só dentro da prévia. */
 function useFontesDoTabloide() {
@@ -100,7 +101,7 @@ function Editor() {
   // A aba mora na URL (/mercadonunes/tabloide/historico…), então dá pra abrir e compartilhar direto.
   const { aba: abaUrl } = useParams()
   const irPara = useNavigate()
-  const aba: Aba = abaUrl === 'catalogo' || abaUrl === 'historico' || abaUrl === 'templates' ? abaUrl : 'montar'
+  const aba: Aba = abaUrl === 'video' || abaUrl === 'catalogo' || abaUrl === 'historico' || abaUrl === 'templates' ? abaUrl : 'montar'
   const setAba = React.useCallback(
     (a: Aba) => irPara(a === 'montar' ? '/mercadonunes/tabloide' : `/mercadonunes/tabloide/${a}`),
     [irPara],
@@ -255,6 +256,7 @@ function Editor() {
         {(
           [
             ['montar', 'Montar tabloide'],
+            ['video', 'Vídeo'],
             ['catalogo', 'Catálogo de produtos'],
             ['historico', 'Histórico'],
             ['templates', 'Templates'],
@@ -280,6 +282,7 @@ function Editor() {
           }}
         />
       )}
+      {aba === 'video' && <AbaVideo atual={dados} config={config} />}
       {aba === 'catalogo' && <CatalogoProdutos removeBg={!!config?.removeBg} />}
       {aba === 'historico' && <Historico key={versaoHistorico} onAbrir={abrir} pasta={pastaAberta} onPasta={setPastaAberta} />}
       {aba === 'templates' && <Templates temProdutos={dados.itens.length > 0} onUsar={usarLayout} />}

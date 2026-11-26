@@ -5,6 +5,7 @@ import type { DadosTabloide } from '../../../server/src/lib/tabloide/layout'
 import { Modal, btnPrimario, btnSecundario, inputCls } from './EscolherFoto'
 import { PreviaTabloide } from './Previa'
 import { EscolherPaginas } from './EmMassa'
+import { SomEFundo, usePrefsVideo } from './SomEFundo'
 import { paginar } from '../../../server/src/lib/tabloide/layout'
 
 export interface VideoPronto {
@@ -14,25 +15,26 @@ export interface VideoPronto {
   estilo: EstiloVideo
 }
 
-/** Gera o vídeo do Reels/Story no servidor e acompanha o progresso. */
-export function ModalVideo({
-  dados,
-  chave,
-  video,
-  vozOk,
-  onPronto,
-  onFechar,
-  onPublicar,
-}: {
+interface PropsVideo {
   dados: DadosTabloide
   chave: string
   video: VideoPronto | null
   /** Locutor configurado no servidor (ElevenLabs). */
   vozOk: boolean
   onPronto: (v: VideoPronto) => void
-  onFechar: () => void
   onPublicar: () => void
-}) {
+}
+
+export function ModalVideo({ onFechar, ...props }: PropsVideo & { onFechar: () => void }) {
+  return (
+    <Modal titulo="Vídeo para Reels / Story" onFechar={onFechar} largura={520}>
+      <PainelVideo {...props} />
+    </Modal>
+  )
+}
+
+/** Gera o vídeo do Reels/Story no servidor e acompanha o progresso (janela e aba "Vídeo"). */
+export function PainelVideo({ dados, chave, video, vozOk, onPronto, onPublicar }: PropsVideo) {
   const atualizado = video?.chave === chave
   const [progresso, setProgresso] = React.useState<number | null>(atualizado ? 1 : null)
   const [erro, setErro] = React.useState<string | null>(null)
@@ -40,7 +42,7 @@ export function ModalVideo({
   // Antes de gerar: escolher se leva locutor e ajustar o que ele vai falar.
   const [opcoes, setOpcoes] = React.useState(!atualizado)
   const [comLocutor, setComLocutor] = React.useState(vozOk)
-  const [comTrilha, setComTrilha] = React.useState(true)
+  const [prefs, mudarPrefs] = usePrefsVideo()
   // Tabloide de Black Friday já abre no estilo Black Friday.
   const [estilo, setEstilo] = React.useState<EstiloVideo>(
     () => video?.estilo ?? (/black/i.test(`${dados.titulo} ${dados.subtitulo}`) ? 'black' : 'tabloide'),
@@ -88,7 +90,15 @@ export function ModalVideo({
     setProgresso(0)
     setOpcoes(false)
     try {
-      const { id, paginasNoVideo } = await tabloideApi.gerarVideo(dados, comLocutor && roteiro ? roteiro : undefined, vozEscolhida?.id, comTrilha, estilo)
+      amostra.current?.pause()
+      const { id, paginasNoVideo } = await tabloideApi.gerarVideo(dados, {
+        roteiro: comLocutor && roteiro ? roteiro : undefined,
+        voz: vozEscolhida?.id,
+        estilo,
+        musicaId: prefs.musicaId || undefined,
+        fundoId: prefs.fundoId || undefined,
+        volumes: prefs.volumes,
+      })
       paginas.current = paginasNoVideo
       for (;;) {
         await new Promise((r) => setTimeout(r, 1500))
@@ -108,7 +118,7 @@ export function ModalVideo({
       setProgresso(null)
     }
     setRefazendo(false)
-  }, [dados, chave, onPronto, comLocutor, roteiro, comTrilha, estilo, vozEscolhida?.id])
+  }, [dados, chave, onPronto, comLocutor, roteiro, estilo, vozEscolhida?.id, prefs])
 
   // O roteiro muda com o estilo (o Black Friday fala uma vez por produto).
   React.useEffect(() => {
@@ -131,12 +141,12 @@ export function ModalVideo({
   }, [estilo, opcoes])
 
   return (
-    <Modal titulo="Vídeo para Reels / Story" onFechar={onFechar} largura={520}>
+    <>
       {atualizado && video && !refazendo && progresso === 1 ? (
         <div className="flex flex-col items-center gap-3">
           <video src={video.url} controls autoPlay loop muted playsInline className="max-h-[60vh] rounded-lg bg-black" />
           <p className="text-center text-xs text-[#9A928B]">
-            Estilo {video.estilo === 'black' ? 'Black Friday' : 'Tabloide'} · vídeo vertical 1080×1920{comLocutor && vozOk ? ', com locutor' : ''}{comTrilha ? ', com trilha' : ''}.
+            Estilo {video.estilo === 'black' ? 'Black Friday' : 'Tabloide'} · vídeo vertical 1080×1920{comLocutor && vozOk ? ', com locutor' : ''}{prefs.musicaId ? ', com música' : ''}.
           </p>
           {aviso && <p className="text-center text-xs text-amber-700">{aviso}</p>}
           <div className="flex flex-wrap justify-center gap-2">
@@ -178,10 +188,10 @@ export function ModalVideo({
               Abertura com a logo 3D Black Friday Nunes, até 8 produtos (um por vez, na ordem da lista) e fechamento.
             </p>
           )}
-          <label className="flex items-center gap-2 text-sm font-semibold text-[#2A2622]">
-            <input type="checkbox" checked={comTrilha} onChange={(e) => setComTrilha(e.target.checked)} />
-            Trilha de fundo e efeito sonoro na troca de produto
-          </label>
+          <SomEFundo prefs={prefs} mudar={mudarPrefs} comVoz={vozOk && comLocutor} />
+          {estilo === 'black' && prefs.fundoId && (
+            <p className="text-[11px] text-[#9A928B]">A abertura 3D tem o fundo dela; o seu fundo entra a partir dos produtos.</p>
+          )}
           {vozOk ? (
             <label className="flex items-center gap-2 text-sm font-semibold text-[#2A2622]">
               <input type="checkbox" checked={comLocutor} onChange={(e) => setComLocutor(e.target.checked)} />
@@ -246,11 +256,11 @@ export function ModalVideo({
             <div className="h-full rounded-full bg-[#C1503F] transition-all" style={{ width: `${Math.round((progresso ?? 0) * 100)}%` }} />
           </div>
           <p className="text-xs text-[#9A928B]">
-            {estilo === 'black' ? 'Um produto por vez, até 8.' : 'O vídeo usa o formato Story e mostra até 4 páginas.'} Pode fechar esta janela: o vídeo continua sendo feito.
+            {estilo === 'black' ? 'Um produto por vez, até 8.' : 'O vídeo usa o formato Story e mostra até 4 páginas.'} Fique nesta tela até terminar.
           </p>
         </div>
       )}
-    </Modal>
+    </>
   )
 }
 

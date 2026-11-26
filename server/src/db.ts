@@ -1844,6 +1844,13 @@ END; $$`);
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`);
   await pool.query(`ALTER TABLE mn_tabloide_fundos ADD COLUMN IF NOT EXISTS nome TEXT NOT NULL DEFAULT ''`);
+  // Músicas de fundo dos vídeos do tabloide, enviadas pelo mercado (mp3).
+  await pool.query(`CREATE TABLE IF NOT EXISTS mn_videos_musicas (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    nome TEXT NOT NULL DEFAULT '',
+    audio BYTEA NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
   // Mascotes do Nunes (PNG sem fundo que o mercado sobe), pra pôr na plaquinha e no tabloide.
   await pool.query(`CREATE TABLE IF NOT EXISTS mn_mascotes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

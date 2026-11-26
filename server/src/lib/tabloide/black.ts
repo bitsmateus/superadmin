@@ -134,9 +134,13 @@ function estrelaSvg(): string {
 
 const UNIDADE: Record<string, string> = { '': 'UND', un: 'UND', kg: 'KG', '100g': '100G', bandeja: 'BDJ' };
 
-const doc = (corpo: string) => `<!doctype html><html><head><meta charset="utf-8">${FONTES}<style>${CSS}</style></head><body>${corpo}</body></html>`;
+const doc = (corpo: string, extra = '') => `<!doctype html><html><head><meta charset="utf-8">${FONTES}<style>${CSS}${extra}</style></head><body>${corpo}</body></html>`;
 
-function paginaProduto(it: ItemTabloide): PaginaVideo {
+/** Foto de fundo escolhida (data URL já validada), escurecida pra o texto continuar legível. */
+const cssDoFundo = (fundoUrl: string) =>
+  fundoUrl ? `.pg{background:linear-gradient(rgba(10,8,8,.45),rgba(10,8,8,.6)),url("${fundoUrl}") center/cover no-repeat}` : '';
+
+function paginaProduto(it: ItemTabloide, css: string): PaginaVideo {
   const [inteiro, cent = ''] = it.preco.split(',');
   const nome = esc([it.nome, it.detalhe && `(${it.detalhe})`].filter(Boolean).join(' '));
   const foto = it.fotoUrl ? `<div class="foto"><img src="${esc(it.fotoUrl)}" alt=""></div>` : '';
@@ -146,11 +150,12 @@ function paginaProduto(it: ItemTabloide): PaginaVideo {
     `<div class="estrela">${estrelaSvg()}<div class="txt"><div class="oferta">OFERTA</div>` +
     `<div class="preco"><span class="rs">R$</span><span class="int">${esc(inteiro)}</span>` +
     `<span class="col"><span class="cent">${cent ? ',' + esc(cent) : ''}</span><span class="un">${UNIDADE[it.unidade.toLowerCase()] ?? esc(it.unidade.toUpperCase())}</span></span></div></div></div></div></div>`;
-  return { doc: doc(corpo), duracao: DUR_PRODUTO, dings: [0.45, 1.05] };
+  return { doc: doc(corpo, css), duracao: DUR_PRODUTO, dings: [0.45, 1.05] };
 }
 
 /** Páginas do vídeo no estilo Black Friday: abertura, um produto por página e fechamento. */
-export function paginasBlack(dados: DadosTabloide): PaginaVideo[] {
+export function paginasBlack(dados: DadosTabloide, fundoUrl = ''): PaginaVideo[] {
+  const css = cssDoFundo(fundoUrl);
   const itens = dados.itens.slice(0, MAX_PRODUTOS_BLACK);
 
   const lugares = [
@@ -166,11 +171,12 @@ export function paginasBlack(dados: DadosTabloide): PaginaVideo[] {
   const fechamento = doc(
     `<div class="pg fim" style="--dur:${DUR_FINAL}s">${fundo(FAIXA)}${logoHtml()}<div class="luz"></div>` +
       `<div class="pilha">${pilha}</div>${validade}</div>`,
+    css,
   );
 
   return [
     { doc: '', clipe: asset('mercadonunes-black-abertura.mp4'), duracao: DUR_INTRO, dings: [0.15, 1.45] },
-    ...itens.map(paginaProduto),
+    ...itens.map((it) => paginaProduto(it, css)),
     { doc: fechamento, duracao: DUR_FINAL, dings: [0.4] },
   ];
 }

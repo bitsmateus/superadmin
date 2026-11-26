@@ -67,7 +67,8 @@ export function ImportarPromocao({ config, onCriados }: { config: ConfigTabloide
   const criar = async () => {
     if (!secoes) return
     try {
-      // 1. Acha a foto de cada variação: no catálogo (código de barras ou nome) e, se não tiver, nas bases pelo código.
+      // 1. Acha a foto de cada variação: no catálogo pelo código de barras; depois nas bases, pelo código; e só em último
+      //    caso a de um produto de nome parecido no catálogo (que pode ser outro sabor/tamanho).
       const variacoes = secoes.flatMap((s) => s.itens.flatMap((i) => i.variacoes.map((v) => ({ ...v, detalhe: i.detalhe }))))
       const achados = new Map<string, ProdutoCatalogo | null>() // chave: ean || nome
       const chave = (v: { nome: string; ean: string }) => v.ean || v.nome
@@ -77,11 +78,15 @@ export function ImportarPromocao({ config, onCriados }: { config: ConfigTabloide
         const { resultados } = await tabloideApi.combinar(lote.map((v) => ({ nome: v.nome, detalhe: v.detalhe, ean: v.ean })))
         lote.forEach((v, k) => achados.set(chave(v), resultados[k]?.produto ?? null))
       }
-      const faltando = variacoes.filter((v) => v.ean && !achados.get(chave(v))?.tem_foto)
+      const faltando = variacoes.filter((v) => {
+        const p = achados.get(chave(v))
+        return v.ean && !(p?.tem_foto && p.ean === v.ean)
+      })
       let feitos = 0
       await emLotes(faltando, 4, async (v) => {
         const p = await tabloideApi.porEan(v.ean, v.nome, v.detalhe).then((r) => r.produto).catch(() => null)
-        if (p) achados.set(chave(v), p)
+        // Sem foto na base: fica a do nome parecido, se havia.
+        if (p?.tem_foto) achados.set(chave(v), p)
         setProgresso(`Buscando fotos que faltam pelo código de barras… ${++feitos}/${faltando.length}`)
       })
 

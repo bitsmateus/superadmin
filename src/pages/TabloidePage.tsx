@@ -110,6 +110,8 @@ function Editor() {
   const [idSalvo, setIdSalvo] = React.useState<string | null>(inicial?.idSalvo ?? null)
   const [config, setConfig] = React.useState<ConfigTabloide | null>(null)
   const [video, setVideo] = React.useState<VideoPronto | null>(null)
+  // Tabloide que o botão "Vídeo" do Histórico mandou abrir na aba Vídeo.
+  const [videoDe, setVideoDe] = React.useState<string | null>(null)
   const [modal, setModal] = React.useState<null | 'video' | 'publicar' | 'legenda' | 'layout'>(null)
   const [formatoPublicar, setFormatoPublicar] = React.useState<'feed' | 'story' | 'reels'>('feed')
   const [ocupado, setOcupado] = React.useState<string | null>(null)
@@ -264,7 +266,10 @@ function Editor() {
         ).map(([id, nome]) => (
           <button
             key={id}
-            onClick={() => setAba(id)}
+            onClick={() => {
+              setVideoDe(null)
+              setAba(id)
+            }}
             className={`whitespace-nowrap rounded-lg px-4 py-2 ${aba === id ? 'bg-[#C1503F] text-white' : 'text-[#7A716A] hover:bg-[#F4F1EC]'}`}
           >
             {nome}
@@ -282,9 +287,20 @@ function Editor() {
           }}
         />
       )}
-      {aba === 'video' && <AbaVideo atual={dados} config={config} />}
+      {aba === 'video' && <AbaVideo atual={dados} config={config} inicial={videoDe} />}
       {aba === 'catalogo' && <CatalogoProdutos removeBg={!!config?.removeBg} />}
-      {aba === 'historico' && <Historico key={versaoHistorico} onAbrir={abrir} pasta={pastaAberta} onPasta={setPastaAberta} />}
+      {aba === 'historico' && (
+        <Historico
+          key={versaoHistorico}
+          onAbrir={abrir}
+          onVideo={(t) => {
+            setVideoDe(t.id)
+            setAba('video')
+          }}
+          pasta={pastaAberta}
+          onPasta={setPastaAberta}
+        />
+      )}
       {aba === 'templates' && <Templates temProdutos={dados.itens.length > 0} onUsar={usarLayout} />}
       {aba === 'montar' && (
         <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_440px]">
@@ -1153,10 +1169,12 @@ function Textos({
 
 function Historico({
   onAbrir,
+  onVideo,
   pasta,
   onPasta,
 }: {
   onAbrir: (t: TabloideSalvo, copia: boolean) => void
+  onVideo: (t: TabloideSalvo) => void
   pasta: string | null
   onPasta: (p: string | null) => void
 }) {
@@ -1327,6 +1345,9 @@ function Historico({
             <button className={btnSecundario} onClick={() => setVendo(null)}>
               Fechar
             </button>
+            <button className={btnSecundario} onClick={() => onVideo(vendo)}>
+              🎬 Vídeo
+            </button>
             <button className={btnSecundario} onClick={() => { onAbrir(vendo, true); setVendo(null) }}>
               Duplicar
             </button>
@@ -1373,6 +1394,9 @@ function Historico({
                 </button>
                 <button className={btnSecundario} onClick={() => onAbrir(t, false)}>
                   Abrir
+                </button>
+                <button className={btnSecundario} onClick={() => onVideo(t)}>
+                  🎬 Vídeo
                 </button>
                 <button className={btnPrimario} onClick={() => onAbrir(t, true)} title="Abre uma cópia pra trocar os preços">
                   Duplicar

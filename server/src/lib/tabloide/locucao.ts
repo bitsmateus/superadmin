@@ -126,11 +126,11 @@ export async function listarVozes(): Promise<Voz[]> {
 }
 
 /** MP3 44,1 kHz / 128 kbps constante — a duração sai do tamanho do arquivo. */
-export async function gerarVoz(texto: string, vozId?: string): Promise<Buffer> {
+export async function gerarVoz(texto: string, vozId?: string, espera = 1500): Promise<Buffer> {
   const chave = process.env.ELEVENLABS_API_KEY;
   if (!chave) throw new Error('ELEVENLABS_API_KEY não configurada');
   const voz = vozId && /^[A-Za-z0-9]{10,40}$/.test(vozId) ? vozId : VOZ_PADRAO();
-  const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voz}?output_format=mp3_44100_128`, {
+  const pedir = () => fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voz}?output_format=mp3_44100_128`, {
     method: 'POST',
     headers: { 'xi-api-key': chave, 'Content-Type': 'application/json', Accept: 'audio/mpeg' },
     body: JSON.stringify({
@@ -140,8 +140,50 @@ export async function gerarVoz(texto: string, vozId?: string): Promise<Buffer> {
     }),
     signal: AbortSignal.timeout(60_000),
   });
+  let r = await pedir();
+  // 429 (muitos pedidos ao mesmo tempo) e erro do lado deles passam sozinhos: espera e pede de novo.
+  for (let tentativa = 1; tentativa <= 3 && (r.status === 429 || r.status >= 500); tentativa++) {
+    await new Promise((ok) => setTimeout(ok, espera * tentativa));
+    r = await pedir();
+  }
   if (!r.ok) throw new Error(`ElevenLabs ${r.status}: ${(await r.text()).slice(0, 200)}`);
   return Buffer.from(await r.arrayBuffer());
+}
+
+/**
+ * Uma fala por página, de 2 em 2: o ElevenLabs limita pedidos simultâneos pelo plano (2 no grátis, 3 no de
+ * entrada) e o Black Friday tem até 10 falas.
+ */
+export async function gerarVozes(textos: string[], vozId?: string, espera?: number): Promise<(Buffer | null)[]> {
+  const audios: (Buffer | null)[] = textos.map(() => null);
+  let proximo = 0;
+  let falhou = false;
+  const trabalhar = async () => {
+    while (!falhou && proximo < textos.length) {
+      const i = proximo++;
+      if (!textos[i]) continue;
+      try {
+        audios[i] = await gerarVoz(textos[i], vozId, espera);
+      } catch (err) {
+        falhou = true; // não gasta crédito com o resto: o vídeo vai sair sem voz
+        throw err;
+      }
+    }
+  };
+  await Promise.all([trabalhar(), trabalhar()]);
+  return audios;
+}
+
+/** Motivo da falha em português, pra aparecer na tela. */
+export function motivoDaVoz(erro: string): string {
+  if (/quota_exceeded/i.test(erro)) return 'acabaram os créditos do ElevenLabs neste mês';
+  if (/missing_permissions/i.test(erro)) return 'a chave não tem permissão de Text to Speech';
+  if (/invalid_api_key| 401/i.test(erro)) return 'a chave do ElevenLabs foi recusada';
+  if (/voice_not_found/i.test(erro)) return 'essa voz não está em "My Voices" da conta';
+  if (/paid_plan_required|payment_required| 402|free users|subscription/i.test(erro)) return 'essa voz ou recurso pede um plano pago';
+  if (/unusual_activity/i.test(erro)) return 'o ElevenLabs bloqueou a conta grátis neste servidor';
+  if (/ 429|concurrent/i.test(erro)) return 'muitos pedidos ao mesmo tempo, tente de novo';
+  return erro.replace(/\s+/g, ' ').slice(0, 160);
 }
 
 export const segundosDoMp3 = (b: Buffer) => (b.length * 8) / 128_000;

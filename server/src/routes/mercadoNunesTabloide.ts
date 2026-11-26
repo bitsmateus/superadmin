@@ -14,7 +14,7 @@ import { separarPorSecao } from '../lib/tabloide/promocao.js';
 import { lerPdfDePromocao } from '../lib/plaquinhas/relatorio.js';
 import { prepararFoto, removeBgDisponivel, type ModoRecorte } from '../lib/tabloide/recorte.js';
 import { MAX_PAGINAS_VIDEO, renderizarImagens, renderizarPdf, renderizarVideo } from '../lib/tabloide/render.js';
-import { gerarVoz, listarVozes, roteiroBlack, roteiroPadrao, vozDisponivel } from '../lib/tabloide/locucao.js';
+import { gerarVozes, listarVozes, motivoDaVoz, roteiroBlack, roteiroPadrao, vozDisponivel } from '../lib/tabloide/locucao.js';
 import { MAX_PRODUTOS_BLACK, paginasDoBlack } from '../lib/tabloide/black.js';
 
 /**
@@ -598,10 +598,10 @@ export async function mercadoNunesTabloideRoutes(app: FastifyInstance) {
       let audios: (Buffer | null)[] = [];
       if (falas.some(Boolean)) {
         try {
-          audios = await Promise.all(falas.map((t) => (t ? gerarVoz(t, voz) : Promise.resolve(null))));
+          audios = await gerarVozes(falas, voz);
         } catch (err) {
           console.error('[tabloide] voz falhou', (err as Error).message);
-          job.aviso = 'Não consegui gerar a voz (ElevenLabs). O vídeo saiu sem locução.';
+          job.aviso = `O vídeo saiu sem locução: ${motivoDaVoz((err as Error).message)}.`;
         }
       }
       const desenhar = () =>

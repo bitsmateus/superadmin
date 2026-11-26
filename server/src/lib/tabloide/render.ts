@@ -23,13 +23,25 @@ function naFila<T>(fn: () => Promise<T>): Promise<T> {
 
 const HOSTS_OK = /^(data:|about:|https:\/\/fonts\.(googleapis|gstatic)\.com\/)/;
 
+const abrirNavegador = () =>
+  puppeteer.launch({
+    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
+    headless: true,
+    // Um Chromium travado falha em 1 min (em vez de 3) e o vídeo tenta de novo.
+    protocolTimeout: 60_000,
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--font-render-hinting=none'],
+  });
+
+async function fecharNavegador(browser: Browser): Promise<void> {
+  const processo = browser.process();
+  const forcar = setTimeout(() => processo?.kill('SIGKILL'), 5_000);
+  await browser.close().catch(() => undefined);
+  clearTimeout(forcar);
+}
+
 async function comNavegador<T>(fn: (b: Browser) => Promise<T>): Promise<T> {
   return naFila(async () => {
-    const browser = await puppeteer.launch({
-      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--font-render-hinting=none'],
-    });
+    const browser = await abrirNavegador();
     try {
       return await fn(browser);
     } finally {
@@ -239,7 +251,8 @@ export async function renderizarVideo(
     const ff = spawn(caminhoFfmpeg(), [
       '-y', '-f', 'image2pipe', '-framerate', String(FPS), '-c:v', 'mjpeg', '-i', '-',
       '-f', 'lavfi', '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100',
-      '-shortest', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p',
+      // -threads 2: o container enxerga todos os núcleos do host e cada thread do x264 guarda quadros na memória.
+      '-shortest', '-c:v', 'libx264', '-threads', '2', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p',
       '-profile:v', 'high', '-c:a', 'aac', '-b:a', '64k', '-movflags', '+faststart', '-r', String(FPS), arquivo,
     ], { stdio: ['pipe', 'ignore', 'pipe'] });
     let erroFf = '';
@@ -248,48 +261,81 @@ export async function renderizarVideo(
     });
     const terminou = new Promise<void>((resolve, reject) => {
       ff.on('error', reject);
-      ff.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`ffmpeg saiu com ${code}: ${erroFf.slice(-400)}`))));
+      ff.on('close', (code, sinal) => (code === 0 ? resolve() : reject(new Error(`ffmpeg saiu com ${code ?? sinal}: ${erroFf.slice(-400)}`))));
     });
+    // Se o ffmpeg morrer no meio, o erro é lido lá embaixo (sem isto o Node derruba o servidor).
+    terminou.catch(() => undefined);
     let erroEntrada: Error | null = null;
     ff.stdin.on('error', (e: Error) => {
       erroEntrada = e;
     });
     const escrever = (buf: Buffer) =>
       new Promise<void>((resolve, reject) => {
-        if (erroEntrada) return reject(erroEntrada);
-        if (ff.stdin.write(buf)) resolve();
-        else ff.stdin.once('drain', () => resolve());
+        // ffmpeg morto: o motivo de verdade está em "terminou", não no EPIPE.
+        const morreu = () => void terminou.then(() => reject(erroEntrada ?? new Error('ffmpeg fechou antes da hora')), reject);
+        if (erroEntrada || ff.exitCode !== null || ff.signalCode !== null) return morreu();
+        if (ff.stdin.write(buf)) return resolve();
+        const andou = () => {
+          ff.off('close', parou);
+          resolve();
+        };
+        const parou = () => {
+          ff.stdin.off('drain', andou);
+          morreu();
+        };
+        ff.stdin.once('drain', andou);
+        ff.once('close', parou);
       });
 
-    await comNavegador(async (browser) => {
-      const page = await novaAba(browser, 1080, 1920);
+    await naFila(async () => {
+      let browser = await abrirNavegador();
       let feitos = 0;
-      for (const [n, p] of paginas.entries()) {
-        if (p.clipe) {
+      const gravar = async (quadro: Buffer) => {
+        await escrever(quadro);
+        feitos++;
+        if (feitos % 15 === 0) progresso(feitos / totalQuadros);
+      };
+      try {
+        for (const [n, p] of paginas.entries()) {
           const quadros = Math.round(duracoes[n] * FPS);
-          const originais = await quadrosDoClipe(p.clipe, path.join(dir, `clipe-${n}`));
-          for (let f = 0; f < quadros; f++) {
-            await escrever(await fs.readFile(originais[quadroNoTempo(f, originais.length)]));
-            feitos++;
-            if (feitos % 15 === 0) progresso(feitos / totalQuadros);
+          if (p.clipe) {
+            const originais = await quadrosDoClipe(p.clipe, path.join(dir, `clipe-${n}`));
+            for (let f = 0; f < quadros; f++) await gravar(await fs.readFile(originais[quadroNoTempo(f, originais.length)]));
+            continue;
           }
-          continue;
+          // Página mais longa que a animação padrão: o fundo continua andando até o fim da fala. --t0 = quanto do vídeo
+          // já passou, pra fogo, brasas e faixas (que não reiniciam entre páginas) seguirem de onde pararam.
+          const t0 = duracoes.slice(0, n).reduce((a, b) => a + b, 0);
+          // Uma aba por página (devolve a memória). Se o Chromium cair, reabre e continua do mesmo quadro.
+          let f = 0;
+          let quedas = 0;
+          while (f < quadros) {
+            let page: Page | undefined;
+            try {
+              page = await novaAba(browser, 1080, 1920);
+              await carregar(page, p.doc);
+              await page.evaluate(`(() => { const e = document.querySelector('.pg'); e?.style.setProperty('--dur', '${duracoes[n].toFixed(2)}s'); e?.style.setProperty('--t0', '${t0.toFixed(2)}s') })()`);
+              await page.evaluate('document.getAnimations().forEach(a => a.pause())');
+              for (; f < quadros; f++) {
+                const ms = Math.round((f / FPS) * 1000);
+                await page.evaluate(`document.getAnimations().forEach(a => { a.currentTime = ${ms} })`);
+                const jpg = await page.screenshot({ type: 'jpeg', quality: 90, clip: { x: 0, y: 0, width: 1080, height: 1920 } });
+                await gravar(Buffer.from(jpg));
+              }
+            } catch (err) {
+              const ffmpegMorreu = erroEntrada || ff.exitCode !== null || ff.signalCode !== null;
+              if (ffmpegMorreu || ++quedas > 2) throw new Error(`página ${n + 1}/${paginas.length}, quadro ${f}: ${(err as Error).message}`);
+              console.error(`[tabloide] Chromium falhou na página ${n + 1}, quadro ${f}; reabrindo:`, (err as Error).message);
+              await fecharNavegador(browser);
+              browser = await abrirNavegador();
+              page = undefined;
+            } finally {
+              await page?.close().catch(() => undefined);
+            }
+          }
         }
-        await carregar(page, p.doc);
-        // Página mais longa que a animação padrão: o fundo continua andando até o fim da fala. --t0 = quanto do vídeo
-        // já passou, pra fogo, brasas e faixas (que não reiniciam entre páginas) seguirem de onde pararam.
-        const t0 = duracoes.slice(0, n).reduce((a, b) => a + b, 0);
-        await page.evaluate(`(() => { const e = document.querySelector('.pg'); e?.style.setProperty('--dur', '${duracoes[n].toFixed(2)}s'); e?.style.setProperty('--t0', '${t0.toFixed(2)}s') })()`);
-        await page.evaluate('document.getAnimations().forEach(a => a.pause())');
-        const quadros = Math.round(duracoes[n] * FPS);
-        for (let f = 0; f < quadros; f++) {
-          const ms = Math.round((f / FPS) * 1000);
-          await page.evaluate(`document.getAnimations().forEach(a => { a.currentTime = ${ms} })`);
-          const jpg = await page.screenshot({ type: 'jpeg', quality: 90, clip: { x: 0, y: 0, width: 1080, height: 1920 } });
-          await escrever(Buffer.from(jpg));
-          feitos++;
-          if (feitos % 15 === 0) progresso(feitos / totalQuadros);
-        }
+      } finally {
+        await fecharNavegador(browser);
       }
     });
     ff.stdin.end();

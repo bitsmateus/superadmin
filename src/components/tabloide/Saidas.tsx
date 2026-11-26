@@ -237,12 +237,12 @@ export function ModalVideo({
         </div>
       ) : (
         <div className="flex flex-col gap-3 py-6 text-center">
-          <p className="text-sm font-semibold text-[#2A2622]">Montando o vídeo… leva uns 20 a 60 segundos.</p>
+          <p className="text-sm font-semibold text-[#2A2622]">Montando o vídeo… pode levar alguns minutos.</p>
           <div className="h-3 overflow-hidden rounded-full bg-[#F4F1EC]">
             <div className="h-full rounded-full bg-[#C1503F] transition-all" style={{ width: `${Math.round((progresso ?? 0) * 100)}%` }} />
           </div>
           <p className="text-xs text-[#9A928B]">
-            O vídeo usa o formato Story e mostra até 4 páginas. Pode fechar esta janela: o vídeo continua sendo feito.
+            {estilo === 'black' ? 'Um produto por vez, até 8.' : 'O vídeo usa o formato Story e mostra até 4 páginas.'} Pode fechar esta janela: o vídeo continua sendo feito.
           </p>
         </div>
       )}

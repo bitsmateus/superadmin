@@ -614,7 +614,8 @@ export async function mercadoNunesTabloideRoutes(app: FastifyInstance) {
       })
       .catch((err: Error) => {
         console.error('[tabloide] vídeo falhou', err.message);
-        job.erro = 'Não consegui gerar o vídeo. Tente de novo.';
+        // O motivo vai junto: quem vê o erro na tela não tem acesso ao log do servidor.
+        job.erro = `Não consegui gerar o vídeo. Tente de novo. (Motivo: ${err.message.replace(/\s+/g, ' ').slice(-220)})`;
         job.status = 'erro';
       });
     return reply.status(202).send({ id, paginasNoVideo: estilo === 'black' ? paginasDoBlack(dados) : MAX_PAGINAS_VIDEO });

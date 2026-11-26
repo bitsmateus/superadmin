@@ -11,6 +11,7 @@ export interface VideoPronto {
   id: string
   url: string
   chave: string // conteúdo do tabloide quando o vídeo foi gerado (pra saber se ficou velho)
+  estilo: EstiloVideo
 }
 
 /** Gera o vídeo do Reels/Story no servidor e acompanha o progresso. */
@@ -40,7 +41,10 @@ export function ModalVideo({
   const [opcoes, setOpcoes] = React.useState(!atualizado)
   const [comLocutor, setComLocutor] = React.useState(vozOk)
   const [comTrilha, setComTrilha] = React.useState(true)
-  const [estilo, setEstilo] = React.useState<EstiloVideo>('tabloide')
+  // Tabloide de Black Friday já abre no estilo Black Friday.
+  const [estilo, setEstilo] = React.useState<EstiloVideo>(
+    () => video?.estilo ?? (/black/i.test(`${dados.titulo} ${dados.subtitulo}`) ? 'black' : 'tabloide'),
+  )
   const [refazendo, setRefazendo] = React.useState(false)
   const [roteiro, setRoteiro] = React.useState<string[] | null>(null)
   const [aviso, setAviso] = React.useState<string | null>(null)
@@ -94,7 +98,7 @@ export function ModalVideo({
         if (s.aviso) setAviso(s.aviso)
         if (s.status === 'pronto') {
           const blob = await tabloideApi.baixarVideo(id)
-          onPronto({ id, url: URL.createObjectURL(blob), chave })
+          onPronto({ id, url: URL.createObjectURL(blob), chave, estilo })
           setProgresso(1)
           return
         }
@@ -132,7 +136,7 @@ export function ModalVideo({
         <div className="flex flex-col items-center gap-3">
           <video src={video.url} controls autoPlay loop muted playsInline className="max-h-[60vh] rounded-lg bg-black" />
           <p className="text-center text-xs text-[#9A928B]">
-            Vídeo vertical 1080×1920{comLocutor && vozOk ? ', com locutor' : ''}{comTrilha ? ', com trilha' : ''}.
+            Estilo {video.estilo === 'black' ? 'Black Friday' : 'Tabloide'} · vídeo vertical 1080×1920{comLocutor && vozOk ? ', com locutor' : ''}{comTrilha ? ', com trilha' : ''}.
           </p>
           {aviso && <p className="text-center text-xs text-amber-700">{aviso}</p>}
           <div className="flex flex-wrap justify-center gap-2">

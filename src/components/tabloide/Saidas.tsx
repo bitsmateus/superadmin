@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { toast } from 'sonner'
-import { baixarArquivo, tabloideApi, type EstiloVideo } from '@/api/mercadoNunesTabloide'
+import { baixarArquivo, tabloideApi, type EstiloVideo, type VozLocutor } from '@/api/mercadoNunesTabloide'
 import type { DadosTabloide } from '../../../server/src/lib/tabloide/layout'
 import { Modal, btnPrimario, btnSecundario, inputCls } from './EscolherFoto'
 import { PreviaTabloide } from './Previa'
@@ -44,13 +44,47 @@ export function ModalVideo({
   const [refazendo, setRefazendo] = React.useState(false)
   const [roteiro, setRoteiro] = React.useState<string[] | null>(null)
   const [aviso, setAviso] = React.useState<string | null>(null)
+  const [vozes, setVozes] = React.useState<VozLocutor[]>([])
+  const [voz, setVoz] = React.useState(() => {
+    try {
+      return localStorage.getItem('mn-voz') ?? ''
+    } catch {
+      return ''
+    }
+  })
+  const vozEscolhida = vozes.find((v) => v.id === voz) ?? vozes[0]
+  const amostra = React.useRef<HTMLAudioElement | null>(null)
+
+  React.useEffect(() => {
+    if (!vozOk) return
+    // Sem a lista o vídeo ainda sai, com a voz padrão do servidor.
+    tabloideApi.vozes().then((r) => setVozes(r.vozes)).catch(() => undefined)
+    return () => amostra.current?.pause()
+  }, [vozOk])
+
+  const escolherVoz = (id: string) => {
+    amostra.current?.pause()
+    setVoz(id)
+    try {
+      localStorage.setItem('mn-voz', id)
+    } catch {
+      /* sem armazenamento: só não lembra */
+    }
+  }
+
+  const ouvirVoz = () => {
+    if (!vozEscolhida?.amostra) return
+    amostra.current?.pause()
+    amostra.current = new Audio(vozEscolhida.amostra)
+    void amostra.current.play().catch(() => toast.error('Não consegui tocar a amostra.'))
+  }
 
   const gerar = React.useCallback(async () => {
     setErro(null)
     setProgresso(0)
     setOpcoes(false)
     try {
-      const { id, paginasNoVideo } = await tabloideApi.gerarVideo(dados, comLocutor && roteiro ? roteiro : undefined, undefined, comTrilha, estilo)
+      const { id, paginasNoVideo } = await tabloideApi.gerarVideo(dados, comLocutor && roteiro ? roteiro : undefined, vozEscolhida?.id, comTrilha, estilo)
       paginas.current = paginasNoVideo
       for (;;) {
         await new Promise((r) => setTimeout(r, 1500))
@@ -70,7 +104,7 @@ export function ModalVideo({
       setProgresso(null)
     }
     setRefazendo(false)
-  }, [dados, chave, onPronto, comLocutor, roteiro, comTrilha, estilo])
+  }, [dados, chave, onPronto, comLocutor, roteiro, comTrilha, estilo, vozEscolhida?.id])
 
   // O roteiro muda com o estilo (o Black Friday fala uma vez por produto).
   React.useEffect(() => {
@@ -154,6 +188,25 @@ export function ModalVideo({
           )}
           {vozOk && comLocutor && (
             <div className="flex flex-col gap-2">
+              {vozes.length > 0 && (
+                <div className="flex items-end gap-2">
+                  <label className="flex flex-1 flex-col gap-1 text-xs font-semibold text-[#6B645D]">
+                    Voz do locutor
+                    <select className={inputCls + ' font-normal'} value={vozEscolhida?.id ?? ''} onChange={(e) => escolherVoz(e.target.value)}>
+                      {vozes.map((v) => (
+                        <option key={v.id} value={v.id}>
+                          {v.nome}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {vozEscolhida?.amostra && (
+                    <button type="button" className={btnSecundario} onClick={ouvirVoz}>
+                      ▶ Ouvir
+                    </button>
+                  )}
+                </div>
+              )}
               <p className="text-xs text-[#9A928B]">O que o locutor vai falar em cada página do vídeo. Pode editar à vontade.</p>
               {roteiro === null ? (
                 <p className="py-4 text-center text-xs text-[#9A928B]">Montando o roteiro…</p>

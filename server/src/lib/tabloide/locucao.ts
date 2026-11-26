@@ -85,8 +85,45 @@ export function roteiroBlack(dados: DadosTabloide, maxProdutos: number): string[
 
 export const vozDisponivel = () => !!process.env.ELEVENLABS_API_KEY;
 
-/** Voz padrão (env); a tela pode escolher outra pelo id. */
-export const VOZ_PADRAO = () => process.env.ELEVENLABS_VOICE_ID || 'pNInz6obpgDQGcFmaJgB';
+/** Vozes escolhidas para o mercado (biblioteca do ElevenLabs); a tela escolhe entre elas. */
+const VOZES_DO_MERCADO = ['UaeEQHfiDI8l58WWXiwS', 'zhza6dIY7yb1xz5MKTvQ', 'rpNe0HOx7heUulPiOEaG', '9EeK37hO7iJiXi8aJfRG', 'Vt2wXa5zSaS5HQMb3E9Q'];
+
+/** Voz padrão: a do env, se houver; senão a primeira da lista. */
+export const VOZ_PADRAO = () => process.env.ELEVENLABS_VOICE_ID || VOZES_DO_MERCADO[0];
+
+export interface Voz {
+  id: string;
+  nome: string;
+  /** Amostra pronta do ElevenLabs (ouvir não gasta crédito). */
+  amostra: string | null;
+}
+
+const vozesLidas = new Map<string, Voz>();
+
+/** Lista pra tela, com nome e amostra. Se o ElevenLabs não responder (chave sem permissão de ler vozes), vai "Voz N". */
+export async function listarVozes(): Promise<Voz[]> {
+  const chave = process.env.ELEVENLABS_API_KEY;
+  if (!chave) return [];
+  const ids = [...new Set([VOZ_PADRAO(), ...VOZES_DO_MERCADO])];
+  return Promise.all(
+    ids.map(async (id, i) => {
+      const ja = vozesLidas.get(id);
+      if (ja) return ja;
+      try {
+        const r = await fetch(`https://api.elevenlabs.io/v1/voices/${id}`, { headers: { 'xi-api-key': chave }, signal: AbortSignal.timeout(8_000) });
+        if (r.ok) {
+          const v = (await r.json()) as { name?: string; preview_url?: string };
+          const voz: Voz = { id, nome: v.name || `Voz ${i + 1}`, amostra: v.preview_url || null };
+          vozesLidas.set(id, voz);
+          return voz;
+        }
+      } catch {
+        /* sem rede: segue com o nome genérico */
+      }
+      return { id, nome: `Voz ${i + 1}`, amostra: null };
+    }),
+  );
+}
 
 /** MP3 44,1 kHz / 128 kbps constante — a duração sai do tamanho do arquivo. */
 export async function gerarVoz(texto: string, vozId?: string): Promise<Buffer> {

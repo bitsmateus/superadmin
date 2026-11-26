@@ -14,7 +14,7 @@ import { separarPorSecao } from '../lib/tabloide/promocao.js';
 import { lerPdfDePromocao } from '../lib/plaquinhas/relatorio.js';
 import { prepararFoto, removeBgDisponivel, type ModoRecorte } from '../lib/tabloide/recorte.js';
 import { MAX_PAGINAS_VIDEO, renderizarImagens, renderizarPdf, renderizarVideo } from '../lib/tabloide/render.js';
-import { gerarVoz, roteiroBlack, roteiroPadrao, vozDisponivel } from '../lib/tabloide/locucao.js';
+import { gerarVoz, listarVozes, roteiroBlack, roteiroPadrao, vozDisponivel } from '../lib/tabloide/locucao.js';
 import { MAX_PRODUTOS_BLACK, paginasDoBlack } from '../lib/tabloide/black.js';
 
 /**
@@ -576,6 +576,8 @@ export async function mercadoNunesTabloideRoutes(app: FastifyInstance) {
     if (!dados.itens.length) return reply.status(400).send({ message: 'Coloque pelo menos um produto.' });
     return { textos: req.body?.estilo === 'black' ? roteiroBlack(dados, MAX_PRODUTOS_BLACK) : roteiroPadrao(dados, MAX_PAGINAS_VIDEO) };
   });
+
+  app.get(`${BASE}/tabloides/vozes`, async () => ({ vozes: await listarVozes() }));
 
   app.post<{ Body: { dados?: Partial<DadosTabloide>; roteiro?: string[]; voz?: string; trilha?: boolean; estilo?: string } }>(`${BASE}/tabloides/video`, async (req, reply) => {
     limparVideos();

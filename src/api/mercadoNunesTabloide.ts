@@ -61,6 +61,12 @@ export interface ConfigTabloide {
 
 export type EstiloVideo = 'tabloide' | 'black'
 
+export interface VozLocutor {
+  id: string
+  nome: string
+  amostra: string | null
+}
+
 export interface FundoSalvo {
   id: string
   nome: string
@@ -155,6 +161,7 @@ export const tabloideApi = {
   exportarPng: (dados: DadosTabloide) =>
     req<{ arquivos: { nome: string; dataUrl: string }[] }>('/tabloides/exportar', json({ dados, saida: 'png' })),
   exportarPdf: (dados: DadosTabloide) => req<Blob>('/tabloides/exportar', json({ dados, saida: 'pdf' }), true),
+  vozes: () => req<{ vozes: VozLocutor[] }>('/tabloides/vozes'),
   roteiroVideo: (dados: DadosTabloide, estilo: EstiloVideo = 'tabloide') => req<{ textos: string[] }>('/tabloides/roteiro', json({ dados, estilo })),
   gerarVideo: (dados: DadosTabloide, roteiro?: string[], voz?: string, trilha = true, estilo: EstiloVideo = 'tabloide') =>
     req<{ id: string; paginasNoVideo: number }>('/tabloides/video', json({ dados, roteiro, voz, trilha, estilo })),

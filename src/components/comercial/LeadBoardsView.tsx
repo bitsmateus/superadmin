@@ -51,7 +51,7 @@ import { DashboardDoSuporte } from '@/components/comercial/DashboardDoSuporte'
 import { CloserMetricsGrid } from '@/components/comercial/CloserMetricsGrid'
 import { isLeadTubarao, PAGINA_TUBARAO } from '@/lib/leadTubarao'
 import { limiteDeDiasDoTipo } from '@/lib/diasDeContato'
-import { formatarResposta, ordemDaPrioridade, passaNaPrioridade, prioridadeExibida, OPCOES_DE_PRIORIDADE, SEM_PRIORIDADE } from '@/lib/respostaMeta'
+import { formatarResposta, ordemDaPrioridade, passaNaPrioridade, prioridadeExibida, textoSeguroNoCsv, OPCOES_DE_PRIORIDADE, SEM_PRIORIDADE } from '@/lib/respostaMeta'
 import { LeadTrashModal } from '@/components/comercial/LeadTrashModal'
 import { LeadTodayPanel } from '@/components/comercial/LeadTodayPanel'
 import { NovaDemandaModal } from '@/components/comercial/NovaDemandaModal'
@@ -628,14 +628,18 @@ export function SdrFilterButton({ value, onChange, rotulo = 'SDR' }: { value: st
 
 function csvEscape(value: string): string {
   const s = value ?? ''
-  return /[",;\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+  return /[",;\n\t]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
 }
 
-function exportLeadsCsv(rows: LeadRow[]) {
+function exportLeadsCsv(rows: LeadRow[], novosLeads: boolean) {
   const cols: { label: string; get: (r: LeadRow) => string }[] = [
-    ...COLUMNS.filter((c) => !c.readOnly).map((c) => ({
+    // Prioridade e Instagram/site são só leitura na tela, mas saem na exportação de Novos Leads (onde as colunas existem).
+    ...COLUMNS.filter((c) => !c.readOnly || (novosLeads && (c.key === 'prioridade' || c.key === 'siteEmpresa'))).map((c) => ({
       label: c.label,
-      get: (r: LeadRow) => r[c.key as LeadRowField] ?? '',
+      get: (r: LeadRow) =>
+        c.key === 'prioridade' ? prioridadeExibida(r.prioridade)
+          : c.key === 'siteEmpresa' ? textoSeguroNoCsv(r.siteEmpresa)
+            : r[c.key as LeadRowField] ?? '',
     })),
     { label: 'Log de criação', get: (r: LeadRow) => formatDateTimeShort(r.createdAt) },
   ]
@@ -909,7 +913,7 @@ function BulkActionBar({
         </span>
         <div className="mx-1 h-6 w-px bg-line" />
         <BulkActionButton icon={<Copy className="h-4 w-4" />} label="Duplicar" onClick={duplicate} />
-        <BulkActionButton icon={<Download className="h-4 w-4" />} label="Exportar" onClick={() => exportLeadsCsv(selectedRows)} />
+        <BulkActionButton icon={<Download className="h-4 w-4" />} label="Exportar" onClick={() => exportLeadsCsv(selectedRows, pageId === 'novos_leads')} />
         <div className="relative" ref={editRef}>
           <BulkActionButton icon={<Pencil className="h-4 w-4" />} label="Editar" onClick={() => setEditOpen((o) => !o)} />
           {editOpen && (

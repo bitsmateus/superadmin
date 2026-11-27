@@ -1,5 +1,5 @@
 import { enviarBoasVindasLead } from '../lib/leadWelcome.js';
-import { lerPrazoESite } from '../lib/formularioMeta.js';
+import { lerEmpresa, lerPrazoESite } from '../lib/formularioMeta.js';
 import { avisarContratoAssinado } from '../lib/avisoContratoAssinado.js';
 import { nichoDoFormulario } from '../lib/trafegoNicho.js';
 import { FastifyInstance } from 'fastify';
@@ -145,6 +145,7 @@ export async function webhookRoutes(app: FastifyInstance) {
       dor_cliente?: string;
       numero_atendentes?: string;
       /** Opcionais (sem validação de tipo no schema): ver lib/formularioMeta.ts. */
+      empresa?: unknown;
       prazo?: unknown;
       prioridade?: unknown;
       site_empresa?: unknown;
@@ -219,7 +220,7 @@ export async function webhookRoutes(app: FastifyInstance) {
         if (!KNOWN_RAW_KEYS.has(key)) qualificacao[key] = value;
       }
 
-      const empresa = typeof raw.company_name === 'string' ? raw.company_name : '';
+      const empresa = lerEmpresa(req.body as Record<string, unknown>);
       const campanha = typeof raw.campaign_name === 'string' ? raw.campaign_name : '';
       const conjunto = typeof raw.adset_name === 'string' ? raw.adset_name : '';
       const origemCampanha = [campanha, conjunto].filter(Boolean).join(' / ');

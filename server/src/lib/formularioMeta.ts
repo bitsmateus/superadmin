@@ -25,6 +25,12 @@ function doRaw(raw: unknown, termos: string[]): string {
   return '';
 }
 
+/** Empresa: a do formulário (`raw.company_name`); quando o raw não tem, o campo "empresa" do topo do payload. */
+export function lerEmpresa(corpo: Record<string, unknown>): string {
+  const raw = corpo.raw && typeof corpo.raw === 'object' ? (corpo.raw as Record<string, unknown>) : {};
+  return texto(raw.company_name) || texto(corpo.empresa);
+}
+
 export function lerPrazoESite(corpo: Record<string, unknown>): { prioridade: string | null; siteEmpresa: string | null } {
   const prioridade = texto(corpo.prazo) || texto(corpo.prioridade) || doRaw(corpo.raw, ['rodar', 'quando']);
   const siteEmpresa = texto(corpo.site_empresa) || doRaw(corpo.raw, ['instagram', 'site']);

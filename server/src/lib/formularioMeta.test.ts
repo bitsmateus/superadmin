@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { lerPrazoESite } from './formularioMeta.js';
+import { lerEmpresa, lerPrazoESite } from './formularioMeta.js';
 
 const RAW = {
   full_name: 'Maria', form_id: '3762735517212360', campaign_name: 'Campanha X',
@@ -29,4 +29,11 @@ test('a pergunta com "rodar" ganha de outra com "quando"; instagram ganha de sit
   const raw = { 'desde_quando_a_empresa_existe?': '2010', 'quando_quer_rodar?': 'o_quanto_antes', 'tem_site?': 'sim', 'qual_o_instagram?': '@x' };
   assert.deepEqual(lerPrazoESite({ raw }), { prioridade: 'o_quanto_antes', siteEmpresa: '@x' });
   assert.equal(lerPrazoESite({ raw: { 'quando_rodar?': ['em_2_a_3_meses'] } }).prioridade, 'em_2_a_3_meses');
+});
+
+test('empresa: a do raw; sem ela, a do topo; sem nenhuma, vazio', () => {
+  assert.equal(lerEmpresa({ empresa: 'Do Topo', raw: { company_name: 'Do Raw' } }), 'Do Raw');
+  assert.equal(lerEmpresa({ empresa: 'Do Topo', raw: { company_name: '  ' } }), 'Do Topo');
+  assert.equal(lerEmpresa({ empresa: 'Do Topo' }), 'Do Topo');
+  assert.equal(lerEmpresa({ empresa: { x: 1 }, raw: {} }), '');
 });

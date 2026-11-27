@@ -20,6 +20,12 @@ export const OPCOES_DE_PRIORIDADE = ['O quanto antes', 'Nos próximos 30 dias', 
 export const passaNaPrioridade = (valor: string | null | undefined, filtro: string | null): boolean =>
   !filtro || prioridadeExibida(valor).toLocaleLowerCase('pt-BR') === filtro.toLocaleLowerCase('pt-BR')
 
+/**
+ * Texto livre do formulário indo pro CSV: o Excel lê como fórmula a célula que começa com = + - @ (e o Instagram costuma
+ * começar com "@"). A tabulação na frente faz a célula ser lida como texto.
+ */
+export const textoSeguroNoCsv = (valor: string): string => (/^[=+\-@]/.test(valor) ? `\t${valor}` : valor)
+
 /** Posição pra ordenar: a ordem do formulário; resposta diferente depois; "Sem ID" por último. */
 export function ordemDaPrioridade(valor: string | null | undefined): number {
   const t = formatarResposta(valor)

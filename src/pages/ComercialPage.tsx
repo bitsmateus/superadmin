@@ -11,6 +11,10 @@ import { useLeadPages, useLeadPagesBooted } from '@/hooks/useLeadPages'
 import { useLeadBoards } from '@/hooks/useLeadBoards'
 import { PipelineSectionTabs } from '@/components/support/PipelineSectionTabs'
 
+/** Abas que viraram o CRM unificado (ver server/src/lib/regrasDaConsolidacao.ts, ABAS_SUBSTITUIDAS). */
+const ABA_UNIFICADA = 'crm-arthur'
+const ABAS_SUBSTITUIDAS = new Set(['crm-luis-2', 'crm-luis-closer'])
+
 /** Tela do Comercial E de Demandas pra uma aba dinâmica (Novos Leads, CRM NX Luis, CRM NX
  * Arthur, ou qualquer outra que um admin tenha criado/duplicado — ver lead_pages.section). Uma
  * rota só por menu (/comercial/:pageId e /demandas/:pageId) — não são páginas fixas no código. */
@@ -52,6 +56,11 @@ export function ComercialPage() {
   if (aba && noPipeline && !aba.noPipeline) return <Navigate to={`/demandas/${aba.id}`} replace />
   if (!aba && noPipeline) return <Navigate to="/pipeline" replace />
   const exists = !!aba
+  // CRM LUIS e CRM LUIS CLOSER foram pro CRM LUIS ATUALIZADO (consolidação): arquivadas, o endereço antigo (e o
+  // ?lead= dos links antigos) abre lá. Desarquivadas, abrem normal.
+  if (!exists && section === 'comercial' && ABAS_SUBSTITUIDAS.has(pageId as string)) {
+    return <Navigate to={`/comercial/${ABA_UNIFICADA}${location.search}`} replace />
+  }
   if (!exists) {
     // Aba não existe (ou foi arquivada) — manda pra primeira disponível do MESMO menu (Comercial
     // e Demandas compartilham essa tela, mas não as abas uma da outra).

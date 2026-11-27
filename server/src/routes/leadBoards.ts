@@ -1,5 +1,5 @@
 import { crmConsolidado, espelhoDeReuniao, pessoaSuspensa } from '../lib/crmConsolidado.js';
-import { comissoesDaVenda } from '../lib/regrasDaConsolidacao.js';
+import { comissoesDaVenda, sqlCardCongelado } from '../lib/regrasDaConsolidacao.js';
 import { MINIMO_DETALHE_MOTIVO, MOTIVOS_DESQUALIFICACAO } from '../lib/trafegoNicho.js';
 import { textoDeVerdade } from '../lib/textoDeVerdade.js';
 import { FastifyInstance } from 'fastify';
@@ -844,8 +844,8 @@ export async function syncEspelhoReuniaoAgendada(leadRowId: string) {
       await db.query(`SELECT set_config('app.actor', 'automação', true)`);
       await db.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`espelho-closer:${ultimos8 ?? leadRowId}`]);
 
-      const { rows: [jaEspelhada] } = await db.query<{ id: string; deleted_at: string | null }>(
-        'SELECT id, deleted_at FROM lead_rows WHERE espelho_origem_id = $1', [leadRowId]
+      const { rows: [jaEspelhada] } = await db.query<{ id: string; deleted_at: string | null; congelado: boolean }>(
+        `SELECT id, deleted_at, ${sqlCardCongelado('lead_rows')} AS congelado FROM lead_rows WHERE espelho_origem_id = $1`, [leadRowId]
       );
       if (jaEspelhada && !jaEspelhada.deleted_at) return null;
 
@@ -869,7 +869,9 @@ export async function syncEspelhoReuniaoAgendada(leadRowId: string) {
         'SELECT MAX(position) as max FROM lead_rows WHERE board_id = $1', [destino.id]
       );
       // A cópia foi retirada quando a lead voltou pro começo do funil e agora ela agendou de novo: restaura a mesma.
-      // Volta já com o conteúdo de agora da original.
+      // Volta já com o conteúdo de agora da original. Cópia congelada (arquivada na consolidação ou em aba arquivada)
+      // fica de histórico e não volta — e o INSERT abaixo também não cria outra (índice único de espelho_origem_id).
+      if (jaEspelhada?.deleted_at && jaEspelhada.congelado) return null;
       if (jaEspelhada?.deleted_at) {
         await db.query(
           `UPDATE lead_rows c SET deleted_at = NULL, board_id = $2, status = $3, position = $4,
@@ -1016,7 +1018,9 @@ export async function propagarEspelho(
        FROM lead_rows r JOIN lead_boards lb ON lb.id = r.board_id
        WHERE (r.id = ANY($1::uuid[]) OR r.espelho_origem_id = ANY($1::uuid[]) OR r.copia_ia_origem_id = ANY($1::uuid[])
               OR r.id = ANY($3::uuid[]))
-         AND r.id <> $2`,
+         AND r.id <> $2
+         -- Card congelado (arquivado na consolidação ou em aba arquivada) não acompanha mais a família.
+         AND NOT ${sqlCardCongelado('r')}`,
       [raizes, leadRowId, espelhoIds]
     );
 
@@ -1326,7 +1330,7 @@ export async function sincronizarContagemNotas(canonicalId: string) {
          notes_count = (SELECT count(*) FROM lead_notes WHERE lead_row_id = $1),
          last_note_preview = $2,
          last_note_at = $3
-       WHERE id = $1 OR espelho_origem_id = $1 OR copia_ia_origem_id = $1`,
+       WHERE id = $1 OR ((espelho_origem_id = $1 OR copia_ia_origem_id = $1) AND NOT ${sqlCardCongelado('lead_rows')})`,
       [canonicalId, ultima ? previewTextoNota(ultima.content) : '', ultima?.created_at ?? null]
     );
     // Card do closer com mais de uma origem (espelho_origens_extras): mostra as Atualizações de todas.
@@ -2098,7 +2102,8 @@ export async function leadBoardRoutes(app: FastifyInstance) {
       // Card do closer que tem outra origem (espelho_origens_extras) fica: só esta origem sai dele.
       await query(
         `UPDATE lead_rows SET deleted_at = NOW(), delete_reason = $2
-         WHERE id = $1 OR (espelho_origem_id = $1 AND cardinality(espelho_origens_extras) = 0) OR copia_ia_origem_id = $1`,
+         WHERE id = $1 OR (((espelho_origem_id = $1 AND cardinality(espelho_origens_extras) = 0) OR copia_ia_origem_id = $1)
+           AND NOT ${sqlCardCongelado('lead_rows')})`,
         [req.params.id, reason]
       );
       await query(
@@ -2129,7 +2134,8 @@ export async function leadBoardRoutes(app: FastifyInstance) {
       // Restaurar a original traz a cópia do closer de volta junto (foram excluídas juntas) — mas
       // quem volta pra tela é sempre a linha pedida, não a cópia que veio de carona.
       const restauradas = await query<{ id: string }>(
-        `UPDATE lead_rows SET deleted_at = NULL WHERE id = $1 OR espelho_origem_id = $1 OR copia_ia_origem_id = $1
+        `UPDATE lead_rows SET deleted_at = NULL
+         WHERE id = $1 OR ((espelho_origem_id = $1 OR copia_ia_origem_id = $1) AND NOT ${sqlCardCongelado('lead_rows')})
          RETURNING *`,
         [req.params.id]
       );

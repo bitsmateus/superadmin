@@ -1,8 +1,9 @@
 import * as React from 'react'
-import { AlertTriangle, Copy, Download, Loader2, Play } from 'lucide-react'
+import { AlertTriangle, Archive, ArchiveRestore, Copy, Download, Loader2, Play } from 'lucide-react'
 import { TopBar } from '@/components/layout/TopBar'
 import { Button } from '@/components/ui/Button'
 import { api } from '@/services/api'
+import { leadPagesService } from '@/services/leadPages'
 import { toast } from 'sonner'
 
 interface Simulacao { geradoEm: string; texto: string; assinatura: string; plano: { problemas: string[] }; referencias: unknown }
@@ -80,6 +81,7 @@ export function ConsolidacaoCrmPage() {
           )}
         </div>
         {erro && <p className="text-sm text-danger">{erro}</p>}
+        {estado?.executada && <AbasAntigasPainel />}
         {estado?.executada && estado.texto && (
           <pre className="overflow-x-auto whitespace-pre-wrap rounded-2xl bg-success/10 p-4 text-xs leading-relaxed text-foreground">{estado.texto}</pre>
         )}
@@ -110,5 +112,82 @@ export function ConsolidacaoCrmPage() {
         )}
       </div>
     </>
+  )
+}
+
+interface AbaAntiga {
+  id: string; nome: string; existe: boolean; arquivada: boolean
+  ativos: number; arquivadosNaConsolidacao: number; naLixeira: number; quadros: number
+}
+interface SituacaoAbasAntigas { abas: AbaAntiga[]; bloqueios: string[] }
+
+/** CRM LUIS e CRM LUIS CLOSER depois da consolidação: arquivar (some da barra lateral, tudo fica no banco) e desarquivar. */
+function AbasAntigasPainel() {
+  const [s, setS] = React.useState<SituacaoAbasAntigas | null>(null)
+  const [erro, setErro] = React.useState<string | null>(null)
+  const [mexendo, setMexendo] = React.useState(false)
+  const URL_BASE = '/api/admin/consolidacao-crm/abas-antigas'
+
+  React.useEffect(() => {
+    api.get<SituacaoAbasAntigas>(URL_BASE).then(setS).catch((e: Error) => setErro(e.message))
+  }, [])
+
+  const acao = async (qual: 'arquivar' | 'desarquivar') => {
+    const pergunta = qual === 'arquivar'
+      ? 'Arquivar CRM LUIS e CRM LUIS CLOSER? Somem da barra lateral; cards, lixeira, quadros e histórico continuam no banco.'
+      : 'Desarquivar CRM LUIS e CRM LUIS CLOSER? Voltam pra barra lateral como estão.'
+    if (!window.confirm(pergunta)) return
+    setMexendo(true)
+    setErro(null)
+    try {
+      setS(await api.post<SituacaoAbasAntigas>(`${URL_BASE}/${qual}`, {}))
+      await leadPagesService.recarregar()
+      toast.success(qual === 'arquivar' ? 'Abas arquivadas' : 'Abas desarquivadas')
+    } catch (e) {
+      setErro((e as Error).message)
+    } finally {
+      setMexendo(false)
+    }
+  }
+
+  const todasArquivadas = !!s && s.abas.every((a) => a.arquivada)
+  const algumaArquivada = !!s && s.abas.some((a) => a.arquivada)
+  return (
+    <div className="space-y-3 rounded-2xl border border-line bg-card p-4 shadow-sm">
+      <p className="flex items-center gap-2 text-sm font-medium text-foreground"><Archive className="h-4 w-4" /> Abas antigas</p>
+      {!s && !erro && <Loader2 className="h-4 w-4 animate-spin text-foreground/50" />}
+      {s && (
+        <ul className="space-y-1 text-xs text-foreground/80">
+          {s.abas.map((a) => (
+            <li key={a.id}>
+              <span className="font-medium text-foreground">{a.nome}</span> ({a.id}): {a.arquivada ? 'arquivada' : 'na barra lateral'} ·{' '}
+              {a.ativos} ativo(s) · {a.arquivadosNaConsolidacao} arquivado(s) na consolidação · {a.naLixeira} na lixeira · {a.quadros} quadro(s)
+            </li>
+          ))}
+        </ul>
+      )}
+      {s && s.bloqueios.length > 0 && !todasArquivadas && (
+        <ul className="list-disc space-y-0.5 pl-5 text-xs text-danger">{s.bloqueios.map((b) => <li key={b}>{b}</li>)}</ul>
+      )}
+      {erro && <p className="text-xs text-danger">{erro}</p>}
+      {s && (
+        <div className="flex flex-wrap gap-2">
+          {!todasArquivadas && (
+            <Button variant="danger" onClick={() => void acao('arquivar')} disabled={mexendo || s.bloqueios.length > 0}>
+              {mexendo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Archive className="h-4 w-4" />} Arquivar as duas
+            </Button>
+          )}
+          {algumaArquivada && (
+            <Button variant="outline" onClick={() => void acao('desarquivar')} disabled={mexendo}>
+              <ArchiveRestore className="h-4 w-4" /> Desarquivar
+            </Button>
+          )}
+        </div>
+      )}
+      <p className="text-xs text-foreground/60">
+        Arquivar só esconde: nada é apagado e nenhum número muda. Quem abrir o endereço antigo vai pro CRM LUIS ATUALIZADO.
+        Também dá pra restaurar uma a uma em "Abas arquivadas", na barra lateral.
+      </p>
+    </div>
   )
 }

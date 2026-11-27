@@ -7,6 +7,19 @@ import { normalizaNome } from './normalizaNome.js';
 
 export const PAGINA_UNIFICADA = 'crm-arthur';
 export const PAGINA_CLOSER_ANTIGA = 'crm-luis-closer';
+/** As abas que foram pro CRM unificado (CRM LUIS e CRM LUIS CLOSER): depois de consolidar, só ficam de histórico. */
+export const ABAS_SUBSTITUIDAS = ['crm-luis-2', PAGINA_CLOSER_ANTIGA];
+/** delete_reason dos cards juntados na consolidação (seguido do id do card que ficou). */
+export const MOTIVO_DA_CONSOLIDACAO = 'Consolidação dos CRMs: juntado no card';
+
+/**
+ * SQL: o card (alias `r`) está congelado — arquivado pela consolidação, ou numa aba arquivada. Fica só de histórico:
+ * nenhuma automação (cópia do closer, propagação de edição, contagem de notas, excluir/restaurar em família) escreve nele.
+ */
+export const sqlCardCongelado = (r: string): string =>
+  `(COALESCE(${r}.delete_reason, '') LIKE '${MOTIVO_DA_CONSOLIDACAO}%'
+    OR EXISTS (SELECT 1 FROM lead_boards cb JOIN lead_pages cp ON cp.id = cb.page
+               WHERE cb.id = ${r}.board_id AND cp.archived_at IS NOT NULL))`;
 
 /** Onde o closer trabalha: o CRM LUIS CLOSER até a consolidação; depois, o CRM unificado. */
 export const paginaDoCloserQuando = (consolidado: boolean): string => (consolidado ? PAGINA_UNIFICADA : PAGINA_CLOSER_ANTIGA);

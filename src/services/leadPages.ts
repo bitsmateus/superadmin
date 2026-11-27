@@ -132,6 +132,9 @@ export const leadPagesService = {
     await reloadPages()
   },
 
+  /** Recarrega a lista (ex.: depois de arquivar/desarquivar por outra rota). */
+  recarregar: (): Promise<void> => reloadPages(),
+
   /** Abas arquivadas — não fica em cache, é sob demanda (admin-only). */
   async getArchived(): Promise<LeadPage[]> {
     const rows = await api.get<PageRow[]>('/api/lead-pages?archived=1')

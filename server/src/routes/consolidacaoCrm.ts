@@ -13,6 +13,7 @@ import { montarPlano, PAGINA_CLOSER, PAGINA_DESTINO, PAGINAS_PROTEGIDAS, type Ab
 import { textoDoRelatorio, type ReferenciasDoBanco } from '../lib/consolidacaoCrmTexto.js';
 import { restrictedBoardFilter } from './leadBoards.js';
 import { crmConsolidado } from '../lib/crmConsolidado.js';
+import { ABAS_SUBSTITUIDAS, MOTIVO_DA_CONSOLIDACAO } from '../lib/regrasDaConsolidacao.js';
 import { agentesPorAba } from './ligacoes3c.js';
 
 const iso = (v: unknown): string => (v instanceof Date ? v.toISOString() : typeof v === 'string' ? v : '');
@@ -89,7 +90,72 @@ async function referencias(db: PoolClient): Promise<Omit<ReferenciasDoBanco, 'pe
   return { perfis, doArthur: itens, ambiente };
 }
 
+interface AbaAntiga {
+  id: string; nome: string; existe: boolean; arquivada: boolean;
+  ativos: number; arquivadosNaConsolidacao: number; naLixeira: number; quadros: number;
+}
+
+/** Situação das abas que foram pro CRM unificado e o que impede arquivá-las. Só lê. */
+async function situacaoDasAbasAntigas(db: PoolClient): Promise<{ abas: AbaAntiga[]; bloqueios: string[] }> {
+  const linhas = async <T>(sql: string, params: unknown[] = []) => (await db.query(sql, params)).rows as T[];
+  const abas = await linhas<AbaAntiga>(
+    `SELECT a.id, COALESCE(p.name, a.id) AS nome, (p.id IS NOT NULL) AS existe, (p.archived_at IS NOT NULL) AS arquivada,
+       (SELECT count(*)::int FROM lead_rows r JOIN lead_boards b ON b.id = r.board_id WHERE b.page = a.id AND r.deleted_at IS NULL) AS ativos,
+       (SELECT count(*)::int FROM lead_rows r JOIN lead_boards b ON b.id = r.board_id WHERE b.page = a.id AND r.deleted_at IS NOT NULL
+          AND r.delete_reason LIKE $2 || '%') AS "arquivadosNaConsolidacao",
+       (SELECT count(*)::int FROM lead_rows r JOIN lead_boards b ON b.id = r.board_id WHERE b.page = a.id AND r.deleted_at IS NOT NULL
+          AND COALESCE(r.delete_reason, '') NOT LIKE $2 || '%') AS "naLixeira",
+       (SELECT count(*)::int FROM lead_boards b WHERE b.page = a.id) AS quadros
+     FROM unnest($1::text[]) AS a(id) LEFT JOIN lead_pages p ON p.id = a.id`, [ABAS_SUBSTITUIDAS, MOTIVO_DA_CONSOLIDACAO]);
+  const bloqueios: string[] = [];
+  if (!(await linhas('SELECT 1 FROM crm_consolidacao')).length) bloqueios.push('A consolidação ainda não foi executada.');
+  for (const a of abas) {
+    if (!a.existe) bloqueios.push(`A aba ${a.id} não existe.`);
+    if (a.ativos) bloqueios.push(`${a.nome}: ainda tem ${a.ativos} card(s) ativo(s).`);
+  }
+  const financeiros = await linhas<{ page: string; name: string }>(
+    'SELECT page, name FROM lead_boards WHERE page = ANY($1) AND (is_vendas OR is_contrato)', [ABAS_SUBSTITUIDAS]);
+  for (const f of financeiros) bloqueios.push(`${f.page}: tem o quadro de Vendas/Contrato "${f.name}" (sumiria do Financeiro).`);
+  // O webhook do Meta Ads pode estar fixado num quadro (META_LEADS_BOARD_ID): numa aba arquivada, ele para de criar leads.
+  const quadroDoMeta = process.env.META_LEADS_BOARD_ID;
+  if (quadroDoMeta && (await linhas('SELECT 1 FROM lead_boards WHERE id::text = $1 AND page = ANY($2)', [quadroDoMeta, ABAS_SUBSTITUIDAS])).length) {
+    bloqueios.push('META_LEADS_BOARD_ID aponta pra um quadro dessas abas: os leads do Meta Ads parariam de entrar.');
+  }
+  return { abas, bloqueios };
+}
+
 export async function consolidacaoCrmRoutes(app: FastifyInstance) {
+  // Abas antigas (CRM LUIS e CRM LUIS CLOSER): ver a situação, arquivar (esconde da barra lateral, mantém tudo no banco)
+  // e desarquivar. Só administrador.
+  const soAdmin = (req: { user: unknown }) => (req.user as { role?: string }).role === 'admin';
+  app.get('/api/admin/consolidacao-crm/abas-antigas', { onRequest: [app.authenticate] }, async (req, reply) => {
+    if (!soAdmin(req)) return reply.status(403).send({ message: 'Só administrador.' });
+    return withTransaction(async (db) => {
+      await db.query('SET TRANSACTION READ ONLY');
+      return situacaoDasAbasAntigas(db);
+    });
+  });
+  app.post('/api/admin/consolidacao-crm/abas-antigas/arquivar', { onRequest: [app.authenticate] }, async (req, reply) => {
+    if (!soAdmin(req)) return reply.status(403).send({ message: 'Só administrador.' });
+    const r = await withTransaction(async (db) => {
+      // Ninguém cria card nessas abas no meio da conferência.
+      await db.query('LOCK TABLE lead_rows IN SHARE ROW EXCLUSIVE MODE');
+      const s = await situacaoDasAbasAntigas(db);
+      if (s.bloqueios.length) return { erro: s.bloqueios.join(' | ') };
+      await db.query('UPDATE lead_pages SET archived_at = NOW() WHERE id = ANY($1) AND archived_at IS NULL', [ABAS_SUBSTITUIDAS]);
+      return situacaoDasAbasAntigas(db);
+    });
+    if ('erro' in r) return reply.status(409).send({ message: `Não arquivei nada: ${r.erro}` });
+    return r;
+  });
+  app.post('/api/admin/consolidacao-crm/abas-antigas/desarquivar', { onRequest: [app.authenticate] }, async (req, reply) => {
+    if (!soAdmin(req)) return reply.status(403).send({ message: 'Só administrador.' });
+    return withTransaction(async (db) => {
+      await db.query('UPDATE lead_pages SET archived_at = NULL WHERE id = ANY($1) AND archived_at IS NOT NULL', [ABAS_SUBSTITUIDAS]);
+      return situacaoDasAbasAntigas(db);
+    });
+  });
+
   // A tela precisa saber qual aba é a do closer (muda quando a consolidação é executada).
   app.get('/api/crm/consolidacao', { onRequest: [app.authenticate] }, async () => ({ consolidado: await crmConsolidado() }));
 

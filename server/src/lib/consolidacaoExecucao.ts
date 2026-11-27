@@ -11,10 +11,11 @@
  */
 import crypto from 'crypto';
 import type { PoolClient } from 'pg';
+import { MOTIVO_DA_CONSOLIDACAO } from './regrasDaConsolidacao.js';
 import { CAMPOS_DA_REGUA, NOVO_NOME, PAGINA_DESTINO, PAGINAS_PROTEGIDAS, chaveDoQuadro, montarPlano, type Entrada, type Plano } from './consolidacaoCrm.js';
 
 export const ATOR = 'Consolidação dos CRMs';
-export const MOTIVO = 'Consolidação dos CRMs: juntado no card';
+export const MOTIVO = MOTIVO_DA_CONSOLIDACAO;
 
 /** Tabelas copiadas antes de qualquer alteração. */
 export const TABELAS_DO_BACKUP = [

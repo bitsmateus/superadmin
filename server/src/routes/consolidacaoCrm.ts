@@ -9,7 +9,6 @@ import { montarPlano, PAGINA_CLOSER, PAGINA_DESTINO, PAGINAS_PROTEGIDAS, type Ab
 import { textoDoRelatorio, type ReferenciasDoBanco } from '../lib/consolidacaoCrmTexto.js';
 import { restrictedBoardFilter } from './leadBoards.js';
 import { crmConsolidado } from '../lib/crmConsolidado.js';
-import { juntarRotinas, type BlocoModelo } from '../lib/rotina.js';
 import { agentesPorAba } from './ligacoes3c.js';
 
 const iso = (v: unknown): string => (v instanceof Date ? v.toISOString() : typeof v === 'string' ? v : '');
@@ -79,16 +78,11 @@ async function referencias(db: PoolClient): Promise<Omit<ReferenciasDoBanco, 'pe
   await item('resultados de reunião registrados por ele', doUsuario('reuniao_resultados'));
   await item('leads com SDR Arthur', `SELECT count(*)::int AS n FROM lead_rows WHERE sdr ~* '^arthur' AND deleted_at IS NULL`, []);
   await item('atualizações assinadas por ele', `SELECT count(*)::int AS n FROM lead_notes WHERE author_name ~* '^arthur'`, []);
-  const rotina = await linhas<{ pagina: string; blocos: number }>(
-    'SELECT pagina, count(*)::int AS blocos FROM rotina_blocos WHERE removido_em IS NULL GROUP BY pagina ORDER BY pagina');
-  const blocosDe = (pagina: string) => linhas<BlocoModelo>(
-    'SELECT inicio, fim, titulo, itens, tipo FROM rotina_blocos WHERE pagina = $1 AND removido_em IS NULL ORDER BY inicio, fim', [pagina]);
-  const rotinaJunta = juntarRotinas(await blocosDe(PAGINA_DESTINO), await blocosDe(PAGINA_CLOSER));
   const ambiente = [
     ...[...agentesPorAba()].map(([aba, nome]) => ({ variavel: 'THREEC_AGENTES', valor: `${aba}=${nome}` })),
     ...(process.env.LEAD_WELCOME_SENDER ? [{ variavel: 'LEAD_WELCOME_SENDER', valor: process.env.LEAD_WELCOME_SENDER }] : []),
   ];
-  return { perfis, doArthur: itens, rotina, rotinaJunta, ambiente };
+  return { perfis, doArthur: itens, ambiente };
 }
 
 export async function consolidacaoCrmRoutes(app: FastifyInstance) {
@@ -111,7 +105,7 @@ export async function consolidacaoCrmRoutes(app: FastifyInstance) {
       pessoas.push({ nome: p.name, papel: p.role, veODestino: permitidos === null || permitidos.some((id) => quadrosDoDestino.has(id)) });
     }
     const geradoEm = new Date().toISOString();
-    const referenciasDoBanco: ReferenciasDoBanco = { pessoas, doArthur: refs.doArthur, rotina: refs.rotina, rotinaJunta: refs.rotinaJunta, ambiente: refs.ambiente };
+    const referenciasDoBanco: ReferenciasDoBanco = { pessoas, doArthur: refs.doArthur, ambiente: refs.ambiente };
     return { geradoEm, plano, referencias: referenciasDoBanco, texto: textoDoRelatorio(plano, referenciasDoBanco, geradoEm) };
   });
 }

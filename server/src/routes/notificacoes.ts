@@ -5,6 +5,7 @@ import { abaDeFora } from '../lib/abasJuntas.js';
 import { donoDaAba, ehAPessoa } from '../lib/reuniaoResultado.js';
 import { PAGINA_DO_SDR, linkDoCard } from '../lib/notificacoes.js';
 import { paginaDoCloser } from '../lib/crmConsolidado.js';
+import { PAGINA_CLOSER_ANTIGA } from '../lib/regrasDaConsolidacao.js';
 
 /**
  * Sininho e popup das notificações do comercial (ver lib/notificacoes.ts). Cada um vê e marca só as suas. Admin, dentro
@@ -16,7 +17,7 @@ const JANELA = "INTERVAL '30 days'";
 /** O dono (perfil) de uma aba do comercial, pelo nome da aba (o CRM IA LUIZA é do dono do CRM ARTHUR). */
 export async function donoDaPagina(pagina: string): Promise<{ id: string; nome: string } | null> {
   const alvo = abaDeFora(pagina) ?? pagina;
-  if (![PAGINA_DO_SDR, await paginaDoCloser()].includes(alvo)) return null;
+  if (![PAGINA_DO_SDR, PAGINA_CLOSER_ANTIGA, await paginaDoCloser()].includes(alvo)) return null;
   const [aba, sdrs, perfis] = await Promise.all([
     queryOne<{ name: string }>('SELECT name FROM lead_pages WHERE id = $1', [alvo]),
     query<{ name: string }>(`SELECT DISTINCT name FROM lead_labels WHERE field = 'sdr'`),

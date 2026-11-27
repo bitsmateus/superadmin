@@ -175,6 +175,9 @@ const AuditLogPage = React.lazy(() =>
   import('./pages/AuditLogPage').then((m) => ({ default: m.AuditLogPage })),
 )
 // Conferência do CRM TUBARAO (só leitura, só admin) — pedido de 13/11.
+const ConsolidacaoCrmPage = React.lazy(() =>
+  import('./pages/ConsolidacaoCrmPage').then((m) => ({ default: m.ConsolidacaoCrmPage })),
+)
 const TubaraoDiagnosticoPage = React.lazy(() =>
   import('./pages/TubaraoDiagnosticoPage').then((m) => ({ default: m.TubaraoDiagnosticoPage })),
 )
@@ -371,6 +374,7 @@ export default function App() {
           <Route path="/relatorios" element={<RelatoriosPage />} />
           <Route path="/auditoria" element={<AuditLogPage />} />
           <Route path="/admin/tubarao" element={<TubaraoDiagnosticoPage />} />
+          <Route path="/admin/consolidar-crm" element={<ConsolidacaoCrmPage />} />
           <Route path="/users" element={<UsersPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Route>

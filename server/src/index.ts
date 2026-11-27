@@ -39,6 +39,7 @@ import { pontosRoutes } from './pontos/rotas.js';
 import { migrarPontos } from './pontos/migracao.js';
 import { comissaoSuporteRoutes } from './routes/comissaoSuporte.js';
 import { tubaraoDiagnosticoRoutes } from './routes/tubaraoDiagnostico.js';
+import { consolidacaoCrmRoutes } from './routes/consolidacaoCrm.js';
 import { startComissaoSuporteSync } from './lib/comissaoSuporte.js';
 import { acertarLeadsTubarao } from './lib/acertoTubarao.js';
 import { cnpjRoutes } from './routes/cnpj.js';
@@ -194,6 +195,7 @@ async function main() {
   await app.register(pontosRoutes);
   await app.register(comissaoSuporteRoutes);
   await app.register(tubaraoDiagnosticoRoutes);
+  await app.register(consolidacaoCrmRoutes);
   await app.register(cnpjRoutes);
   await app.register(leadLabelRoutes);
   await app.register(supportColumnRoutes);

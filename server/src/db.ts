@@ -495,8 +495,12 @@ END $$`);
   // Quem FECHOU a venda (aba Vendas): diferente do SDR = sai também a comissão de fechamento pra
   // essa pessoa; igual ao SDR ou vazio = só a de SDR. Ver sincronizarComissaoCloser.
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS closer TEXT NOT NULL DEFAULT ''`);
-  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS lead_rows_espelho_origem_idx
-    ON lead_rows(espelho_origem_id) WHERE espelho_origem_id IS NOT NULL`);
+  // No máximo uma cópia ATIVA por lead (pedido de 27/11): a cópia arquivada na consolidação dos CRMs fica no banco,
+  // ligada à lead, e quando a lead reagenda nasce uma nova no CRM do closer (ver syncEspelhoReuniaoAgendada). A da
+  // lixeira comum continua sendo restaurada (não nasce outra). Troca o índice antigo (uma por lead, contando a lixeira).
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS lead_rows_espelho_origem_ativo_idx
+    ON lead_rows(espelho_origem_id) WHERE espelho_origem_id IS NOT NULL AND deleted_at IS NULL`);
+  await pool.query(`DROP INDEX IF EXISTS lead_rows_espelho_origem_idx`);
   // Lead de outro CRM que a IA Luiza agendou (SDR = "IA Luiza"): a cópia no CRM IA LUIZA guarda aqui o id da
   // original (ver syncCopiaDaIa em leadBoards.ts). No máximo uma cópia por lead.
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS copia_ia_origem_id UUID`);

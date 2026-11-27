@@ -844,8 +844,11 @@ export async function syncEspelhoReuniaoAgendada(leadRowId: string) {
       await db.query(`SELECT set_config('app.actor', 'automação', true)`);
       await db.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`espelho-closer:${ultimos8 ?? leadRowId}`]);
 
-      const { rows: [jaEspelhada] } = await db.query<{ id: string; deleted_at: string | null; congelado: boolean }>(
-        `SELECT id, deleted_at, ${sqlCardCongelado('lead_rows')} AS congelado FROM lead_rows WHERE espelho_origem_id = $1`, [leadRowId]
+      // Pode haver mais de uma (a congelada da consolidação + uma nova): vale a ativa; senão a da lixeira comum (que é
+      // restaurada); a congelada nunca volta.
+      const { rows: [jaEspelhada] } = await db.query<{ id: string; deleted_at: string | null }>(
+        `SELECT id, deleted_at FROM lead_rows WHERE espelho_origem_id = $1 AND NOT ${sqlCardCongelado('lead_rows')}
+         ORDER BY (deleted_at IS NULL) DESC, created_at DESC LIMIT 1`, [leadRowId]
       );
       if (jaEspelhada && !jaEspelhada.deleted_at) return null;
 
@@ -870,8 +873,7 @@ export async function syncEspelhoReuniaoAgendada(leadRowId: string) {
       );
       // A cópia foi retirada quando a lead voltou pro começo do funil e agora ela agendou de novo: restaura a mesma.
       // Volta já com o conteúdo de agora da original. Cópia congelada (arquivada na consolidação ou em aba arquivada)
-      // fica de histórico e não volta — e o INSERT abaixo também não cria outra (índice único de espelho_origem_id).
-      if (jaEspelhada?.deleted_at && jaEspelhada.congelado) return null;
+      // fica de histórico: nasce uma nova no CRM do closer, como em qualquer reunião nova (o índice único só conta as ativas).
       if (jaEspelhada?.deleted_at) {
         await db.query(
           `UPDATE lead_rows c SET deleted_at = NULL, board_id = $2, status = $3, position = $4,

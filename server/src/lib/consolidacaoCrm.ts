@@ -10,8 +10,11 @@
  *  B) CRM LUIS — tudo é movido.
  *     - Duplicado SÓ com mesmo telefone E mesmo primeiro nome (sem acento/maiúscula). Mesmo telefone com nome diferente:
  *       move os dois e lista.
- *     - Duplicado: fica o card do ARTHUR, sem mudar etapa nem campo preenchido. Do outro entram só os campos vazios (nunca
- *       retornar, agendamento e calendar_event_id), o histórico e os vínculos. Etapas diferentes: lista.
+ *     - Duplicado na mesma etapa: fica o card do ARTHUR, sem mudar campo preenchido. Do outro entram só os campos vazios
+ *       (nunca retornar, agendamento e calendar_event_id), o histórico e os vínculos.
+ *     - Duplicado em etapas diferentes: NÃO junta; os dois são movidos como estão e listados pra decidir depois.
+ *  Responsável: todos os leads do CRM LUIS ATUALIZADO passam a ter "Luis" (única exceção ao "nenhum campo muda").
+ *  SDR, histórico e autoria continuam como estão.
  *  C) Régua preservada (entrou_coluna_em e regua_* intactos), nenhuma comissão recalculada, lixeira e duplicados antigos do
  *     CRM ARTHUR sem mexer, CRM IA LUIZA e CRM TUBARAO intactos (o que bate com eles só é listado).
  */
@@ -51,8 +54,6 @@ export interface DuplicadoDoLuis {
   sai: LeadResumo;
   completar: { campo: string; valor: string }[];
   divergentes: { campo: string; fica: string; outro: string }[];
-  /** Etapa do card do LUIS (já no nome do quadro do destino) diferente da do card do ARTHUR: a etapa não muda. */
-  etapaDiferente: boolean;
   alertas: string[];
 }
 
@@ -70,6 +71,8 @@ export interface Plano {
   /** Closer sem cópia ligada, com mais de um card do ARTHUR no mesmo telefone: não há como escolher sem deduzir. */
   closerAmbiguos: { closer: LeadResumo; candidatos: LeadResumo[] }[];
   luisDuplicados: DuplicadoDoLuis[];
+  /** Mesmo telefone e nome, mas em etapas diferentes: não junta, os dois são movidos. */
+  luisEtapaDiferente: { luis: LeadResumo; arthur: LeadResumo; etapaNoDestino: string | null }[];
   luisNomeDiferente: { luis: LeadResumo; arthur: LeadResumo }[];
   /** LUIS com mais de um card do ARTHUR de mesmo telefone e mesmo primeiro nome. */
   luisAmbiguos: { luis: LeadResumo; candidatos: LeadResumo[] }[];
@@ -78,6 +81,8 @@ export interface Plano {
   duplicadosSoNoDestino: LeadResumo[][];
   comProtegidas: { lead: LeadResumo; protegido: LeadResumo; motivo: string }[];
   etiquetasACriar: { campo: string; nome: string; cor: string; leads: number }[];
+  /** Leads que hoje não têm "Luis" como responsável (e passam a ter). */
+  responsavelMuda: number;
   porSdr: { sdr: string; leads: number }[];
   total: { destinoAntes: number; doLuis: number; doCloser: number; arquivados: number; esperadoNoFinal: number };
 }
@@ -104,7 +109,7 @@ const mesmoFone = (a: Lead, b: Lead) => !!chaveFone(a.telefone) && mesmoTelefone
 const NAO_COMPLETA = new Set([
   'id', 'board_id', 'position', 'created_at', 'updated_at', 'deleted_at', 'delete_reason', 'status', 'notes_count',
   'last_note_preview', 'last_note_at', 'espelho_origem_id', 'espelho_origens_extras',
-  'copia_ia_origem_id', 'venda_origem_id', 'movido_em', 'vinculos',
+  'copia_ia_origem_id', 'venda_origem_id', 'movido_em', 'vinculos', 'responsavel',
   // Nunca copiados (regra B).
   'retornar', 'agendamento', 'calendar_event_id',
   // Estado da automação (régua, boas-vindas): é de cada card.
@@ -228,6 +233,7 @@ export function montarPlano({ abas, quadros, etiquetas, leads }: Entrada): Plano
   const luisDuplicados: DuplicadoDoLuis[] = [];
   const luisNomeDiferente: Plano['luisNomeDiferente'] = [];
   const luisAmbiguos: Plano['luisAmbiguos'] = [];
+  const luisEtapaDiferente: Plano['luisEtapaDiferente'] = [];
   const sobreviventes = new Map<string, Record<string, unknown>>();
   for (const l of doLuis) {
     const doTelefone = doArthur.filter((a) => mesmoFone(l, a));
@@ -244,6 +250,12 @@ export function montarPlano({ abas, quadros, etiquetas, leads }: Entrada): Plano
       continue;
     }
     const fica = mesmoNome[0];
+    // Etapas diferentes: não junta até decidir; os dois são movidos como estão.
+    const etapaDoLuis = destinoDoQuadro.get(l.board_id);
+    if (!etapaDoLuis || etapaDoLuis.id !== fica.board_id) {
+      luisEtapaDiferente.push({ luis: resumo(l), arthur: resumo(fica), etapaNoDestino: etapaDoLuis?.name ?? null });
+      continue;
+    }
     arquivados.add(l.id);
     // Só o que está VAZIO no que fica; nada preenchido dele muda (inclusive a etapa).
     const junto = sobreviventes.get(fica.id) ?? { ...fica };
@@ -259,15 +271,13 @@ export function montarPlano({ abas, quadros, etiquetas, leads }: Entrada): Plano
       }
     }
     sobreviventes.set(fica.id, junto);
-    const etapaDoLuis = destinoDoQuadro.get(l.board_id);
     const alertas: string[] = [];
     if (l.optout === true && fica.optout !== true) alertas.push('o card do CRM LUIS tem opt-out (pediu pra não receber mensagem); o do ARTHUR não');
     if ((l.vinculos['vendas'] ?? 0) > 0 && (fica.vinculos['vendas'] ?? 0) > 0) {
       alertas.push('os dois têm venda registrada: a venda do card que sai fica ligada a ele (só pode haver uma por card)');
     }
     luisDuplicados.push({
-      fica: resumo(fica), sai: resumo(l), completar, divergentes,
-      etapaDiferente: !etapaDoLuis || etapaDoLuis.id !== fica.board_id, alertas,
+      fica: resumo(fica), sai: resumo(l), completar, divergentes, alertas,
     });
   }
 
@@ -344,10 +354,12 @@ export function montarPlano({ abas, quadros, etiquetas, leads }: Entrada): Plano
     luisDuplicados,
     luisNomeDiferente,
     luisAmbiguos,
+    luisEtapaDiferente,
     luisCloserMesmoTelefone,
     duplicadosSoNoDestino,
     comProtegidas,
     etiquetasACriar: [...faltam.values()],
+    responsavelMuda: finais.filter((l) => normalizaNome(texto(l.responsavel)) !== 'luis').length,
     porSdr: [...porSdr].map(([sdr, n]) => ({ sdr, leads: n })).sort((a, b) => b.leads - a.leads),
     total: {
       destinoAntes: doArthur.length, doLuis: doLuis.length, doCloser: doCloser.length, arquivados: arquivados.size,

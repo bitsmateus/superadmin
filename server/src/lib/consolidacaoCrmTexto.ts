@@ -20,6 +20,7 @@ export function textoDoRelatorio(p: Plano, r: ReferenciasDoBanco, geradoEm: stri
   if (p.destino) L.push(`Destino: ${p.destino.nomeAtual} (id ${p.destino.id}) → passa a se chamar ${p.destino.nomeNovo}.`);
   L.push(`Origens: ${p.origens.map((o) => `${o.nome} (${o.id})`).join(', ') || '—'}.`);
   L.push('Nenhum card do CRM ARTHUR muda de etapa. Régua (entrou_coluna_em, regua_*) preservada em todos. Comissão não é recalculada.');
+  L.push('Única mudança de campo: Responsável = Luis em todos os leads do CRM novo. SDR, histórico e autoria ficam como estão.');
   L.push('Lixeira e duplicados antigos do CRM ARTHUR, CRM IA LUIZA e CRM TUBARAO: sem mexer.');
 
   titulo(`O que impede a execução (${p.problemas.length})`);
@@ -28,7 +29,8 @@ export function textoDoRelatorio(p: Plano, r: ReferenciasDoBanco, geradoEm: stri
   titulo('Total esperado no CRM de destino');
   const t = p.total;
   L.push(`${t.destinoAntes} já no destino + ${t.doLuis} do CRM LUIS + ${t.doCloser} do CRM LUIS CLOSER − ${t.arquivados} arquivado(s) = ${t.esperadoNoFinal}`);
-  L.push(`Arquivados: ${p.closerArquivados.length} do closer (par no ARTHUR) + ${p.luisDuplicados.length} do CRM LUIS (duplicado confirmado).`);
+  L.push(`Arquivados: ${p.closerArquivados.length} do closer (par no ARTHUR) + ${p.luisDuplicados.length} do CRM LUIS (duplicado na mesma etapa).`);
+  L.push(`Responsável passa a ser Luis em ${p.responsavelMuda} lead(s).`);
   L.push(`Coluna SDR não muda: ${p.porSdr.map((s) => `${s.sdr} ${s.leads}`).join(', ') || '—'}.`);
   L.push(`Não são tocados: ${p.protegidas.map((x) => `${x.nome} (${x.leads} leads)`).join(', ') || '—'}.`);
 
@@ -61,20 +63,22 @@ export function textoDoRelatorio(p: Plano, r: ReferenciasDoBanco, geradoEm: stri
     for (const c of p.closerAmbiguos) L.push(`- ${quem(c.closer)} [${c.closer.quadro}] ↔ ${c.candidatos.map((x) => `${x.nome || 'sem nome'} [${x.quadro}]`).join(' | ')}`);
   }
 
-  titulo(`B) CRM LUIS duplicado confirmado — mesmo telefone e mesmo nome (${p.luisDuplicados.length})`);
+  titulo(`B) CRM LUIS duplicado confirmado — mesmo telefone, mesmo nome e mesma etapa (${p.luisDuplicados.length})`);
   p.luisDuplicados.forEach((d, i) => {
     L.push('', `${i + 1}. ${quem(d.fica)}${d.alertas.length ? ` — ATENÇÃO: ${d.alertas.join('; ')}` : ''}`);
-    L.push(`   fica: ${onde(d.fica)} [${ligados(d.fica)}] — etapa e campos preenchidos não mudam`);
+    L.push(`   fica: ${onde(d.fica)} [${ligados(d.fica)}] — campos preenchidos não mudam`);
     L.push(`   sai:  ${onde(d.sai)} [${ligados(d.sai)}] (arquivado, histórico vai pro que fica)`);
     if (d.completar.length) L.push(`   completa (estava vazio): ${d.completar.map((c) => `${c.campo} = ${c.valor}`).join(' | ')}`);
     if (d.divergentes.length) L.push(`   diferentes (vale o do ARTHUR): ${d.divergentes.map((c) => `${c.campo}: "${c.fica}" x "${c.outro}"`).join(' | ')}`);
   });
   nenhum(p.luisDuplicados.length);
 
-  const etapas = p.luisDuplicados.filter((d) => d.etapaDiferente);
-  titulo(`B) Etapa diferente (${etapas.length}) — a etapa NÃO muda; decidir caso a caso`);
-  for (const d of etapas) L.push(`- ${d.fica.nome || d.sai.nome} · ${d.fica.telefone}: CRM ARTHUR em "${d.fica.quadro}" x CRM LUIS em "${d.sai.quadro}"`);
-  nenhum(etapas.length);
+  titulo(`B) Etapa diferente (${p.luisEtapaDiferente.length}) — NÃO junta: os dois vão pro CRM novo como estão; decidir caso a caso`);
+  for (const x of p.luisEtapaDiferente) {
+    L.push(`- ${x.luis.nome || x.arthur.nome} · ${x.luis.telefone}: CRM ARTHUR em "${x.arthur.quadro}" x CRM LUIS em "${x.luis.quadro}"`
+      + (x.etapaNoDestino ? ` (no CRM novo: "${x.etapaNoDestino}")` : ''));
+  }
+  nenhum(p.luisEtapaDiferente.length);
 
   titulo(`B) Mesmo telefone, nome diferente (${p.luisNomeDiferente.length}) — NÃO junta, os dois ficam; decidir`);
   for (const x of p.luisNomeDiferente) L.push(`- CRM LUIS: ${quem(x.luis)} [${x.luis.quadro}] · CRM ARTHUR: ${x.arthur.nome || 'sem nome'} [${x.arthur.quadro}]`);

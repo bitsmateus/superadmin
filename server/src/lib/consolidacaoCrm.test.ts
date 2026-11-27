@@ -56,17 +56,25 @@ test('A) closer sem cópia e com dois cards do ARTHUR no telefone: não escolhe,
   assert.match(r.problemas.join(' '), /decidir qual é o par/);
 });
 
-test('B) LUIS: duplicado só com telefone E primeiro nome; completa só vazios, nunca retornar/agendamento/calendar_event_id', () => {
+test('B) LUIS: duplicado só com telefone E primeiro nome; etapa diferente não junta; completa só vazios, nunca retornar/agendamento/calendar_event_id', () => {
   const r = plano([
     lead('a1', 'a-follow', { telefone: '+55 54 99999-1111', nome: 'Júlia Souza', sdr: 'Arthur', empresa: '', valor_mrr: 'R$ 100,00', agendamento: '', retornar: '' }),
     lead('l1', 'l-novos', { telefone: '5499991111', nome: 'julia', sdr: 'Luis', empresa: 'Loja', valor_mrr: 'R$ 200,00', agendamento: '2026-12-01T10:00', retornar: '2026-12-02T10:00', calendar_event_id: 'x' }),
   ]);
-  const d = r.luisDuplicados[0];
+  // Etapas diferentes (Follow up x Leads Novos): não junta, os dois vão.
+  assert.deepEqual(r.luisDuplicados, []);
+  assert.deepEqual(r.luisEtapaDiferente.map((x) => [x.luis.id, x.arthur.id, x.etapaNoDestino]), [['l1', 'a1', 'Leads Novos']]);
+  assert.equal(r.total.esperadoNoFinal, 2);
+  const r2 = plano([
+    lead('a1', 'a-novos', { telefone: '+55 54 99999-1111', nome: 'Júlia Souza', sdr: 'Arthur', empresa: '', valor_mrr: 'R$ 100,00', agendamento: '', retornar: '', responsavel: 'Arthur' }),
+    lead('l1', 'l-novos', { telefone: '5499991111', nome: 'julia', sdr: 'Luis', empresa: 'Loja', valor_mrr: 'R$ 200,00', agendamento: '2026-12-01T10:00', retornar: '2026-12-02T10:00', calendar_event_id: 'x' }),
+  ]);
+  const d = r2.luisDuplicados[0];
   assert.equal(d.fica.id, 'a1');
   assert.deepEqual(d.completar.map((c) => c.campo), ['empresa']);
   assert.ok(d.divergentes.some((x) => x.campo === 'sdr'));
-  assert.equal(d.etapaDiferente, true);
-  assert.equal(r.total.esperadoNoFinal, 1);
+  assert.equal(r2.total.esperadoNoFinal, 1);
+  assert.equal(r2.responsavelMuda, 1);
 });
 
 test('B) mesmo telefone com nome diferente: não junta, lista; e-mail igual não conta nada', () => {
@@ -85,7 +93,8 @@ test('B) mesma etapa não aparece como "etapa diferente"; régua nunca é copiad
     lead('a1', 'a-agendada', { telefone: '54999991111', nome: 'Ana', regua: '' }),
     lead('l1', 'l-agendada', { telefone: '54999991111', nome: 'Ana', regua: 'disparo', regua_etapa: 'D3', entrou_coluna_em: '2026-11-20' }),
   ]);
-  assert.equal(r.luisDuplicados[0].etapaDiferente, false);
+  assert.equal(r.luisDuplicados.length, 1);
+  assert.deepEqual(r.luisEtapaDiferente, []);
   assert.ok(!r.luisDuplicados[0].completar.some((c) => c.campo.startsWith('regua') || c.campo === 'entrou_coluna_em'));
 });
 

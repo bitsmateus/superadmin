@@ -71,7 +71,11 @@ import { cn, formatDateTimeShort } from '@/lib/utils'
 import { formatBRLCents, parseBRLCents } from '@/lib/currency'
 import { useAllLeadRows, useLeadBoards, useLeadBoardsBooted, useLeadRows } from '@/hooks/useLeadBoards'
 import { useLeadLabels } from '@/hooks/useLeadLabels'
+import { useSdrSuspenso } from '@/hooks/useSdrSuspenso'
+import { chaveDoNomeDoQuadro } from '@/lib/sdrEQuadro'
 import { useLeadPages } from '@/hooks/useLeadPages'
+import { leadNotesService } from '@/services/leadNotes'
+import { db } from '@/services/db'
 import { useAuth } from '@/hooks/useAuth'
 import { leadBoardsService } from '@/services/leadBoards'
 import { leadLabelsService } from '@/services/leadLabels'
@@ -785,6 +789,68 @@ function MoveSubmenu({
   )
 }
 
+/** O que decide pra onde vai o lead quando alguém marca o SDR numa aba sem dono (ex.: Novos Leads). */
+interface RegrasDoSdr {
+  allBoards: LeadBoard[]
+  allPages: LeadPage[]
+  /** Quadros do CRM de cada SDR (Luis -> CRM LUIS ATUALIZADO, IA Luiza -> CRM IA LUIZA…). */
+  sdrPageBoards: Map<string, LeadBoard[]>
+  quadrosTubarao: LeadBoard[]
+  consolidado: boolean
+}
+
+/**
+ * Marca o SDR nos leads e leva cada um pro CRM daquele SDR — a MESMA regra pra coluna SDR da linha e pro "Editar" em
+ * massa (pedido de 27/11):
+ *  - lead de Tubarão (em Novos Leads) vai pro CRM TUBARAO; os outros, pro CRM do SDR marcado;
+ *  - cai no quadro de mesmo nome (sem diferenciar maiúscula/acento); sem quadro igual, no PRIMEIRO quadro do CRM, e isso
+ *    fica escrito nas Atualizações do lead;
+ *  - SDR sem CRM: o SDR fica marcado e o lead fica onde está, com aviso na tela. Nunca fica parado em silêncio.
+ * No CRM TUBARAO e no CRM unificado o SDR só fica marcado (o card não sai de lá), como antes.
+ */
+function marcarSdrNosLeads(rows: LeadRow[], sdr: string, r: RegrasDoSdr) {
+  let semCrm = 0
+  let noPrimeiro = 0
+  for (const row of rows) {
+    const board = r.allBoards.find((b) => b.id === row.boardId)
+    if (!sdr || !board || board.page === PAGINA_TUBARAO || (r.consolidado && board.page === PAGINA_UNIFICADA)) {
+      leadBoardsService.updateRow(row.id, { sdr })
+      continue
+    }
+    const paraTubarao = board.page === 'novos_leads' && isLeadTubarao(row) && r.quadrosTubarao.length > 0
+    const candidatos = (paraTubarao ? r.quadrosTubarao : r.sdrPageBoards.get(sdr) ?? [])
+      .filter((b) => !b.isVendas && !b.isContrato)
+      .sort((a, b) => a.position - b.position)
+    if (!candidatos.length) {
+      leadBoardsService.updateRow(row.id, { sdr })
+      semCrm++
+      continue
+    }
+    const igual = candidatos.find((b) => chaveDoNomeDoQuadro(b.name) === chaveDoNomeDoQuadro(board.name))
+    const destino = igual ?? candidatos[0]
+    if (destino.id === row.boardId) {
+      leadBoardsService.updateRow(row.id, { sdr })
+      continue
+    }
+    leadBoardsService.updateRow(row.id, { sdr, boardId: destino.id })
+    if (!igual) {
+      noPrimeiro++
+      const crm = r.allPages.find((p) => p.id === destino.page)?.name ?? destino.page
+      void leadNotesService.addNote(
+        row.id,
+        `<p>SDR ${sdr} marcado. O ${crm} não tem o quadro "${board.name}", então o lead foi para o primeiro quadro de lá: "${destino.name}".</p>`,
+        db.getCurrentUser() || 'Sistema',
+      )
+    }
+  }
+  if (noPrimeiro) {
+    toast.info(`${noPrimeiro === 1 ? 'O lead foi' : `${noPrimeiro} leads foram`} para o primeiro quadro do CRM de ${sdr} (não havia quadro com o mesmo nome). Ficou anotado nas Atualizações.`)
+  }
+  if (semCrm) {
+    toast.warning(`${sdr} não tem CRM próprio: ${semCrm === 1 ? 'o lead ficou' : `${semCrm} leads ficaram`} onde ${semCrm === 1 ? 'estava' : 'estavam'}, só com o SDR marcado.`)
+  }
+}
+
 const BULK_EDIT_FIELDS: { key: LeadLabelField; label: string }[] = [
   { key: 'tipo', label: 'Tipo' },
   { key: 'diaContato', label: 'Dia de contato' },
@@ -794,7 +860,10 @@ const BULK_EDIT_FIELDS: { key: LeadLabelField; label: string }[] = [
 
 function BulkEditSubmenu({ onApply, pageId }: { onApply: (field: LeadLabelField, value: string) => void; pageId: string }) {
   const [field, setField] = React.useState<LeadLabelField | null>(null)
-  const labels = useLeadLabels(field ?? 'status', pageId)
+  const todas = useLeadLabels(field ?? 'status', pageId)
+  // SDR suspenso não é opção pra escolher (os leads antigos continuam com o nome dele).
+  const sdrSuspenso = useSdrSuspenso()
+  const labels = field === 'sdr' ? todas.filter((l) => !sdrSuspenso(l.name)) : todas
 
   if (!field) {
     return (
@@ -851,6 +920,9 @@ function BulkActionBar({
   onClear,
   pageId,
   sdrLock,
+  sdrPageBoards,
+  quadrosTubarao,
+  consolidado,
 }: {
   selectedIds: Set<string>
   allRows: LeadRow[]
@@ -859,6 +931,9 @@ function BulkActionBar({
   onClear: () => void
   sdrLock: string | undefined
   pageId: string
+  sdrPageBoards: Map<string, LeadBoard[]>
+  quadrosTubarao: LeadBoard[]
+  consolidado: boolean
 }) {
   const [moveOpen, setMoveOpen] = React.useState(false)
   const moveRef = React.useRef<HTMLDivElement>(null)
@@ -898,7 +973,9 @@ function BulkActionBar({
   }
 
   const applyBulkEdit = (field: LeadLabelField, value: string) => {
-    for (const r of selectedRows) leadBoardsService.updateRow(r.id, { [field]: value })
+    // SDR em massa move igual à coluna SDR da linha (só onde a coluna existe: aba sem dono, ex.: Novos Leads).
+    if (field === 'sdr' && !sdrLock) marcarSdrNosLeads(selectedRows, value, { allBoards, allPages, sdrPageBoards, quadrosTubarao, consolidado })
+    else for (const r of selectedRows) leadBoardsService.updateRow(r.id, { [field]: value })
     setEditOpen(false)
     onClear()
   }
@@ -1026,6 +1103,7 @@ function BoardGroup({
   }
   // No CRM do Luis Closer a coluna que se chama SDR nos outros CRMs aparece como Closer.
   const consolidado = useCrmConsolidado()
+  const allPages = useLeadPages()
   const cols = columnsForSdrLock(sdrLock, board.isVendas, hideIanMateusCols, board.name, crmArthurLuis, crmDoSuporte, board.page === 'novos_leads').map((c) =>
     board.page === 'crm-luis-closer' && c.key === 'sdr' ? { ...c, label: 'Closer' }
       : hideIanMateusCols && c.key === 'retornar' ? { ...c, label: 'Finalizar' }
@@ -1375,20 +1453,13 @@ function BoardGroup({
                               const target = quadro && quadro.id !== row.boardId ? quadro : undefined
                               applyFieldChange(row, target ? { status: next, boardId: target.id } : { status: next })
                             } else if (col.key === 'sdr') {
-                              // Marcar o SDR aqui (só existe em abas sem dono, ex.: Novos Leads) já
-                              // manda o lead pro quadro de MESMO NOME na aba daquele SDR — não faz
-                              // sentido ficar em Novos Leads depois de atribuído.
-                              // Lead de Tubarão (isLeadTubarao) só vai pro CRM TUBARAO, com o SDR marcado (pedido de 13/11).
-                              // No próprio CRM TUBARAO o SDR (Arthur, IA Luiza, Luis…) só fica marcado: o card não sai de lá.
-                              const paraTubarao = board.page === 'novos_leads' && isLeadTubarao(row) && quadrosTubarao.length > 0
-                              const target = next && board.page !== PAGINA_TUBARAO && !(consolidado && board.page === PAGINA_UNIFICADA)
-                                ? paraTubarao
-                                  ? quadrosTubarao.find((b) => b.name.trim().toLowerCase() === board.name.trim().toLowerCase()) ?? quadrosTubarao[0]
-                                  : sdrPageBoards.get(next)?.find(
-                                      (b) => b.name.trim().toLowerCase() === board.name.trim().toLowerCase(),
-                                    )
-                                : undefined
-                              applyFieldChange(row, target ? { sdr: next, boardId: target.id } : { sdr: next })
+                              // Marcar o SDR aqui (só existe em abas sem dono, ex.: Novos Leads) já manda o lead pro CRM
+                              // daquele SDR — ver marcarSdrNosLeads (mesma regra do "Editar" em massa). Com várias linhas
+                              // selecionadas, cada uma vai pro quadro equivalente ao DELA.
+                              const alvo = selectedIds.has(row.id) && selectedIds.size > 1
+                                ? leadBoardsService.getRows().filter((x) => selectedIds.has(x.id))
+                                : [row]
+                              marcarSdrNosLeads(alvo, next, { allBoards, allPages, sdrPageBoards, quadrosTubarao, consolidado })
                             } else {
                               applyFieldChange(row, { [col.key]: next })
                             }
@@ -2053,6 +2124,9 @@ export function LeadBoardsView({ page, tituloDaTela, aoLadoDoTitulo }: LeadBoard
                   onClear={() => setSelectedIds(new Set())}
                   pageId={page}
                   sdrLock={sdrLock}
+                  sdrPageBoards={sdrPageBoards}
+                  quadrosTubarao={quadrosTubarao}
+                  consolidado={consolidado}
                 />
               </>
             )}

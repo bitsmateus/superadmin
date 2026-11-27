@@ -12,6 +12,8 @@ export interface Profile {
   /** Preenchidos só na lista da Equipe (GET /api/users). */
   suspendedAt?: string | null
   removedAt?: string | null
+  /** Só na lista enxuta da equipe (GET /api/team): suspenso ou removido. */
+  inativo?: boolean
   id: string
   email: string
   name: string | null

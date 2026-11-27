@@ -5,6 +5,7 @@ import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { useOutsideClose } from '@/hooks/useOutsideClose'
 import { useLeadLabels } from '@/hooks/useLeadLabels'
+import { useSdrSuspenso } from '@/hooks/useSdrSuspenso'
 import { leadLabelsService } from '@/services/leadLabels'
 import { cn } from '@/lib/utils'
 import type { LeadLabelField } from '@/types/leadBoard'
@@ -39,10 +40,12 @@ export interface LeadLabelCellProps {
 
 export function LeadLabelCell({ field, value, onChange, required, pageId, className, placeholder, limite }: LeadLabelCellProps) {
   const todasAsEtiquetas = useLeadLabels(field, pageId)
-  const labels = React.useMemo(
-    () => (limite !== undefined ? todasAsEtiquetas.slice(0, limite) : todasAsEtiquetas),
-    [todasAsEtiquetas, limite],
-  )
+  // SDR suspenso/removido (ex.: Arthur) não aparece pra escolher; quem já tem o nome dele gravado continua mostrando.
+  const sdrSuspenso = useSdrSuspenso()
+  const labels = React.useMemo(() => {
+    const escolhiveis = field === 'sdr' ? todasAsEtiquetas.filter((l) => !sdrSuspenso(l.name)) : todasAsEtiquetas
+    return limite !== undefined ? escolhiveis.slice(0, limite) : escolhiveis
+  }, [todasAsEtiquetas, limite, field, sdrSuspenso])
   const current = todasAsEtiquetas.find((l) => l.name === value)
   const [open, setOpen] = React.useState(false)
   // "Tipo" aceita texto livre além das etiquetas: ali o SDR anota o que o lead é/quer com as

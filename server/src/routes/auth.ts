@@ -90,7 +90,9 @@ export async function authRoutes(app: FastifyInstance) {
   // GET /api/team — lista enxuta (id/name/email) para seletor de responsável.
   // Disponível a qualquer usuário autenticado (ferramenta interna do time).
   app.get('/api/team', { onRequest: [app.authenticate] }, async () => {
-    return query('SELECT id, name, email, role, area FROM profiles ORDER BY name NULLS LAST, email');
+    // inativo: suspenso ou removido — o front tira o nome dele das listas de escolha (ex.: SDR), não do que já está gravado.
+    return query(`SELECT id, name, email, role, area, (suspended_at IS NOT NULL OR removed_at IS NOT NULL) AS inativo
+                  FROM profiles ORDER BY name NULLS LAST, email`);
   });
 
   // POST /api/users — admin only, creates a new user

@@ -39,6 +39,7 @@ import { RetornarField } from '@/components/comercial/RetornarField'
 import { AgendamentoField } from '@/components/comercial/AgendamentoField'
 import { LeadLabelCell } from '@/components/comercial/LeadLabelCell'
 import { limiteDeDiasDoTipo } from '@/lib/diasDeContato'
+import { formatarResposta } from '@/lib/respostaMeta'
 import { RichTextEditor, type RichTextEditorHandle } from '@/components/comercial/RichTextEditor'
 import { ClientDrawer } from '@/components/crm/ClientDrawerLazy'
 import { api } from '@/services/api'
@@ -454,10 +455,10 @@ function LeadDetailModalInner({
             {!modoSimples && !suporte && (
               <>
                 <FieldRow icon={<Type className="h-3.5 w-3.5" />} label="Dor do cliente">
-                  <BoxedField value={row.dorCliente} onSave={(v) => leadBoardsService.updateRow(row.id, { dorCliente: v })} />
+                  <BoxedField value={formatarResposta(row.dorCliente)} onSave={(v) => leadBoardsService.updateRow(row.id, { dorCliente: v })} />
                 </FieldRow>
                 <FieldRow icon={<Hash className="h-3.5 w-3.5" />} label="Nº atendentes">
-                  <BoxedField value={row.numeroAtendentes} onSave={(v) => leadBoardsService.updateRow(row.id, { numeroAtendentes: v })} />
+                  <BoxedField value={formatarResposta(row.numeroAtendentes)} onSave={(v) => leadBoardsService.updateRow(row.id, { numeroAtendentes: v })} />
                 </FieldRow>
                 <FieldRow icon={<Hash className="h-3.5 w-3.5" />} label="Valor MRR">
                   <BoxedCurrencyField value={row.valorMrr} onSave={(v) => leadBoardsService.updateRow(row.id, { valorMrr: v })} />
@@ -750,7 +751,7 @@ const CAMPOS_EDITADOS: Record<string, { rotulo: string; icone: React.ReactNode; 
   nome: { rotulo: 'Nome', icone: <Pencil className="h-3.5 w-3.5" />, formatar: (v) => v },
   empresa: { rotulo: 'Empresa', icone: <Pencil className="h-3.5 w-3.5" />, formatar: (v) => v },
   telefone: { rotulo: 'Telefone', icone: <Phone className="h-3.5 w-3.5" />, formatar: (v) => v },
-  dor_cliente: { rotulo: 'Dor do cliente', icone: <Type className="h-3.5 w-3.5" />, formatar: (v) => v },
+  dor_cliente: { rotulo: 'Dor do cliente', icone: <Type className="h-3.5 w-3.5" />, formatar: formatarResposta },
   closer: { rotulo: 'Closer', icone: <UserCircle2 className="h-3.5 w-3.5" />, formatar: (v) => v },
 }
 

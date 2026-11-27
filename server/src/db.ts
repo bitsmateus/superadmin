@@ -483,6 +483,10 @@ END $$`);
   // Colunas extras adicionadas depois: dor do cliente, atendentes, valores.
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS dor_cliente TEXT NOT NULL DEFAULT ''`);
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS numero_atendentes TEXT NOT NULL DEFAULT ''`);
+  // Respostas do formulário do Meta: prazo ("quando quer colocar pra rodar?", como o cliente respondeu) e Instagram/site da empresa.
+  // Nulas quando o lead não respondeu; os leads antigos ficam como estão.
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS prioridade TEXT`);
+  await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS site_empresa TEXT`);
   await pool.query(`ALTER TABLE lead_rows ADD COLUMN IF NOT EXISTS notes_count INT NOT NULL DEFAULT 0`);
   // Espelho CRM ARTHUR -> CRM LUIS CLOSER (ver syncEspelhoReuniaoAgendada em leadBoards.ts): a
   // cópia no CRM do closer guarda aqui o id da lead original do Arthur. Índice único = no máximo

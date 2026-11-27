@@ -78,6 +78,10 @@ export interface LeadRow {
   numero: string
   dorCliente: string
   numeroAtendentes: string
+  /** Resposta do formulário do Meta a "Quando você quer colocar isso pra rodar?", como veio. Vazio = sem resposta. */
+  prioridade: string
+  /** Instagram ou site da empresa (formulário do Meta). */
+  siteEmpresa: string
   valorMrr: string
   valorImplementacao: string
   /** Fidelidade do contrato fechado (texto livre). Obrigatória pra marcar como Vendido. */

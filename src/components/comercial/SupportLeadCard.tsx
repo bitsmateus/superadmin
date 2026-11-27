@@ -1,3 +1,4 @@
+import { formatarResposta } from '@/lib/respostaMeta'
 import * as React from 'react'
 import { Loader2, MessageSquare, Paperclip } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
@@ -43,10 +44,10 @@ export function SupportLeadCard({ leadId, onClose }: { leadId: string | null; on
             <Field label="SDR" value={data.lead.sdr} />
             <Field label="Tipo" value={data.lead.tipo} />
             <Field label="Dia de contato" value={data.lead.dia_contato} />
-            <Field label="Nº atendentes" value={data.lead.numero_atendentes} />
+            <Field label="Nº atendentes" value={formatarResposta(data.lead.numero_atendentes)} />
             <Field label="Valor MRR" value={data.lead.valor_mrr ? `R$ ${data.lead.valor_mrr}` : ''} />
             <Field label="Valor implementação" value={data.lead.valor_implementacao ? `R$ ${data.lead.valor_implementacao}` : ''} />
-            <Field label="Dor do cliente" value={data.lead.dor_cliente} full />
+            <Field label="Dor do cliente" value={formatarResposta(data.lead.dor_cliente)} full />
           </div>
           <div>
             <span className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-foreground/60">

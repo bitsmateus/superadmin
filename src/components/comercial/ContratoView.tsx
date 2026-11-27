@@ -42,6 +42,7 @@ import { LeadLinkPanel, LeadPickerModal } from '@/components/comercial/LeadLinkP
 import { salvarLeadDaFicha, suggestCrmLead } from '@/services/crmLeadLookup'
 import { useDebouncedCallback } from '@/hooks/useDebouncedCallback'
 import { formatDateShort, initials } from '@/lib/utils'
+import { formatarResposta } from '@/lib/respostaMeta'
 import { cn } from '@/lib/utils'
 import type { Client } from '@/types/client'
 
@@ -1164,7 +1165,7 @@ function ClientLeadCell({ clientId }: { clientId: string }) {
         <span className="text-[11px] leading-snug text-foreground/55">
           MRR {row.valorMrr || '—'} · Instalação {row.valorImplementacao || '—'} · Fidelidade{' '}
           {row.fidelidade ? row.fidelidade : <span className="font-medium text-warning">falta</span>}
-          {row.numeroAtendentes ? ` · ${row.numeroAtendentes} atendente(s)` : ''}
+          {row.numeroAtendentes ? ` · ${/^\d+$/.test(row.numeroAtendentes) ? `${row.numeroAtendentes} atendente(s)` : formatarResposta(row.numeroAtendentes)}` : ''}
         </span>
       )}
       <div className="flex flex-wrap items-center gap-1.5">

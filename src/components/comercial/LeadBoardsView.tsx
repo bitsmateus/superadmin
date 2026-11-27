@@ -51,6 +51,7 @@ import { DashboardDoSuporte } from '@/components/comercial/DashboardDoSuporte'
 import { CloserMetricsGrid } from '@/components/comercial/CloserMetricsGrid'
 import { isLeadTubarao, PAGINA_TUBARAO } from '@/lib/leadTubarao'
 import { limiteDeDiasDoTipo } from '@/lib/diasDeContato'
+import { formatarResposta, ordemDaPrioridade, passaNaPrioridade, prioridadeExibida, OPCOES_DE_PRIORIDADE, SEM_PRIORIDADE } from '@/lib/respostaMeta'
 import { LeadTrashModal } from '@/components/comercial/LeadTrashModal'
 import { LeadTodayPanel } from '@/components/comercial/LeadTodayPanel'
 import { NovaDemandaModal } from '@/components/comercial/NovaDemandaModal'
@@ -120,6 +121,9 @@ const COLUMNS: ColumnDef[] = [
   { key: 'sdr', label: 'SDR', width: 100, tag: true },
   { key: 'dorCliente', label: 'Dor do cliente', width: 200, align: 'center' },
   { key: 'numeroAtendentes', label: 'Número de atendentes', width: 170, align: 'center' },
+  // Só em Novos Leads (ver columnsForSdrLock): respostas do formulário do Meta, só leitura.
+  { key: 'prioridade', label: 'Prioridade', width: 170, align: 'center', readOnly: true },
+  { key: 'siteEmpresa', label: 'Instagram/site', width: 200, align: 'center', readOnly: true },
   { key: 'valorMrr', label: 'Valor MRR', width: 140, currency: true, align: 'center' },
   { key: 'valorImplementacao', label: 'Valor de Implementação', width: 170, currency: true, align: 'center' },
   { key: 'fechamento', label: 'Fechamento', type: 'date', width: 140, align: 'center' },
@@ -180,6 +184,7 @@ function columnsForSdrLock(
   boardName = '',
   crmArthurLuis = false,
   crmDoSuporte = false,
+  novosLeads = false,
 ): ColumnDef[] {
   if (isVendas) return COLUMNS.filter((c) => VENDAS_COLUMN_KEYS.has(c.key))
   if (crmDoSuporte) {
@@ -193,7 +198,8 @@ function columnsForSdrLock(
   const mostraDisparo = crmArthurLuis && nomeQuadro.startsWith('disparoemmassa')
   // "Fechamento" só existe no contexto de venda — fora dele seria uma coluna vazia em todo lead.
   const base = COLUMNS.filter(
-    (c) => c.key !== 'fechamento' && (c.key !== 'followup' || mostraFollowup) && (c.key !== 'disparo' || mostraDisparo),
+    (c) => c.key !== 'fechamento' && (c.key !== 'followup' || mostraFollowup) && (c.key !== 'disparo' || mostraDisparo)
+      && (novosLeads || (c.key !== 'prioridade' && c.key !== 'siteEmpresa')),
   )
   const withoutSdr = sdrLock ? base.filter((c) => c.key !== 'sdr') : base
   const visible = hideIanMateusCols ? withoutSdr.filter((c) => !IAN_MATEUS_HIDDEN_COLUMN_KEYS.has(c.key)) : withoutSdr
@@ -254,6 +260,8 @@ type ChaveDeOrdem = LeadRowField | 'createdAt' | 'position' | 'entrouColuna'
 
 function compareRowsByColumn(a: LeadRow, b: LeadRow, key: ChaveDeOrdem): number {
   if (key === 'position') return a.position - b.position
+  // Prioridade ordena na ordem das respostas do formulário (O quanto antes → Só estou pesquisando), com "Sem ID" por último.
+  if (key === 'prioridade') return ordemDaPrioridade(a.prioridade) - ordemDaPrioridade(b.prioridade) || a.prioridade.localeCompare(b.prioridade, 'pt-BR')
   if (key === 'entrouColuna') return compararPorEntradaNaColuna(a, b)
   if (key === 'valorMrr' || key === 'valorImplementacao') {
     return parseBRLCents(a[key]) - parseBRLCents(b[key])
@@ -524,6 +532,42 @@ function PageActionsMenu({ pageId, pageName, boards }: { pageId: string; pageNam
           <Button onClick={confirmDuplicate} disabled={!duplicateName.trim()} loading={busy}>Duplicar</Button>
         </div>
       </Modal>
+    </div>
+  )
+}
+
+/** Novos Leads: filtro só da Prioridade (a aba não tem o botão "Filtro" geral). */
+function PrioridadeFilterButton({ value, onChange }: { value: string | null; onChange: (v: string | null) => void }) {
+  const [open, setOpen] = React.useState(false)
+  const ref = React.useRef<HTMLDivElement>(null)
+  useOutsideClose(ref, open, () => setOpen(false))
+
+  return (
+    <div ref={ref} className="relative">
+      <ToolbarButton
+        icon={<Filter className="h-3.5 w-3.5" />}
+        onClick={() => setOpen((o) => !o)}
+        className={value ? 'text-accent' : undefined}
+      >
+        {value ? `Prioridade: ${value}` : 'Prioridade'}
+      </ToolbarButton>
+      {open && (
+        <div className="absolute left-0 top-full z-20 mt-1 w-52 rounded-lg border border-line bg-card p-1.5 shadow-xl">
+          {[null, ...OPCOES_DE_PRIORIDADE, SEM_PRIORIDADE].map((opcao) => (
+            <button
+              key={opcao ?? 'todas'}
+              type="button"
+              onClick={() => { onChange(opcao); setOpen(false) }}
+              className={cn(
+                'flex w-full items-center rounded-md px-2 py-1.5 text-left text-xs',
+                value === opcao ? 'bg-accent/10 font-medium text-accent' : 'text-foreground/70 hover:bg-elevate/[0.04]',
+              )}
+            >
+              {opcao ?? 'Todas'}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -921,6 +965,7 @@ interface BoardGroupProps {
   allBoards: LeadBoard[]
   search: string
   sdrFilter: string | null
+  prioridadeFilter: string | null
   filterRules: FilterRule[]
   focusRowId: string | null
   onFocused: () => void
@@ -951,7 +996,7 @@ interface BoardGroupProps {
 }
 
 function BoardGroup({
-  board, allBoards, search, sdrFilter, filterRules, focusRowId, onFocused, onCreateRow, onOpenLead, registerScrollEl,
+  board, allBoards, search, sdrFilter, prioridadeFilter, filterRules, focusRowId, onFocused, onCreateRow, onOpenLead, registerScrollEl,
   onTableScroll,
   selectedIds, onToggleRow, onToggleAll,
   draggingIds, isDragOver, onRowDragStart, onRowDragEnd, onBoardDragOver, onBoardDragLeave, onBoardDrop,
@@ -975,7 +1020,7 @@ function BoardGroup({
     setSortBy((prev) => (prev.key === key ? { key, desc: !prev.desc } : { key, desc: false }))
   }
   // No CRM do Luis Closer a coluna que se chama SDR nos outros CRMs aparece como Closer.
-  const cols = columnsForSdrLock(sdrLock, board.isVendas, hideIanMateusCols, board.name, crmArthurLuis, crmDoSuporte).map((c) =>
+  const cols = columnsForSdrLock(sdrLock, board.isVendas, hideIanMateusCols, board.name, crmArthurLuis, crmDoSuporte, board.page === 'novos_leads').map((c) =>
     board.page === 'crm-luis-closer' && c.key === 'sdr' ? { ...c, label: 'Closer' }
       : hideIanMateusCols && c.key === 'retornar' ? { ...c, label: 'Finalizar' }
       : c,
@@ -1000,13 +1045,13 @@ function BoardGroup({
   const allRows = useLeadRows(board.id)
   const rows = React.useMemo(() => {
     const filtered = allRows.filter((r) =>
-      matchesSearch(r, search) && (!sdrFilter || r.sdr === sdrFilter) && matchesLeadFilters(r, filterRules),
+      matchesSearch(r, search) && (!sdrFilter || r.sdr === sdrFilter) && passaNaPrioridade(r.prioridade, prioridadeFilter) && matchesLeadFilters(r, filterRules),
     )
     return [...filtered].sort((a, b) => {
       const cmp = compareRowsByColumn(a, b, sortBy.key)
       return sortBy.desc ? -cmp : cmp
     })
-  }, [allRows, search, sdrFilter, filterRules, sortBy])
+  }, [allRows, search, sdrFilter, prioridadeFilter, filterRules, sortBy])
   const allSelected = rows.length > 0 && rows.every((r) => selectedIds.has(r.id))
   // Venda desfeita continua no quadro (pra não sumir o histórico) mas fica FORA dos totais —
   // senão o somatório de MRR contaria dinheiro que não entrou.
@@ -1241,7 +1286,15 @@ function BoardGroup({
                   </td>
                   {cols.map((col) => (
                     <td key={col.key} className={cn('p-0 align-middle', GRID_BORDER)}>
-                      {col.readOnly ? (
+                      {col.key === 'prioridade' || col.key === 'siteEmpresa' ? (
+                        // Só texto, no mesmo estilo de "Dor do cliente" (sem cor nem selo).
+                        <div
+                          title={col.key === 'prioridade' ? prioridadeExibida(row.prioridade) : row.siteEmpresa || undefined}
+                          className="min-h-[34px] truncate px-2.5 py-1.5 text-center text-sm text-foreground"
+                        >
+                          {col.key === 'prioridade' ? prioridadeExibida(row.prioridade) : row.siteEmpresa || '–'}
+                        </div>
+                      ) : col.readOnly ? (
                         <div className={cn('truncate px-2.5 py-1.5 text-sm text-foreground/40', col.align === 'center' && 'text-center')}>
                           {formatDateTimeShort(row.createdAt)}
                         </div>
@@ -1383,7 +1436,8 @@ function BoardGroup({
                         />
                       ) : (
                         <EditableField
-                          value={row[col.key as LeadRowField]}
+                          // Resposta do Meta com "_": formatada só na tela (só grava se alguém editar o texto).
+                          value={col.key === 'dorCliente' || col.key === 'numeroAtendentes' ? formatarResposta(row[col.key]) : row[col.key as LeadRowField]}
                           type={col.type}
                           placeholder={col.required ? 'Obrigatório' : undefined}
                           onSave={(next) => leadBoardsService.updateRow(row.id, { [col.key]: next })}
@@ -1539,6 +1593,9 @@ export function LeadBoardsView({ page, tituloDaTela, aoLadoDoTitulo }: LeadBoard
   }, [allRows, boards])
   const [search, setSearch] = React.useState('')
   const [sdrFilter, setSdrFilter] = React.useState<string | null>(null)
+  const [prioridadeEscolhida, setPrioridadeEscolhida] = React.useState<string | null>(null)
+  // Só vale em Novos Leads: trocando de aba, o filtro não esconde lead de outro quadro.
+  const prioridadeFilter = page === 'novos_leads' ? prioridadeEscolhida : null
   const [filterRules, setFilterRules] = React.useState<FilterRule[]>([])
   const [filtersOpen, setFiltersOpen] = React.useState(false)
   const [logOpen, setLogOpen] = React.useState(false)
@@ -1571,7 +1628,7 @@ export function LeadBoardsView({ page, tituloDaTela, aoLadoDoTitulo }: LeadBoard
   // A barra de rolagem fixa vale pra todos os quadros: usa a largura do mais largo (os de cadência têm uma coluna a mais).
   const tableWidth = React.useMemo(() => {
     const larguraDe = (nome: string) =>
-      columnsForSdrLock(sdrLock, false, hideIanMateusCols, nome, crmArthurLuis, crmDoSuporte).reduce((sum, c) => sum + columnWidth(c, columnWidths), 0)
+      columnsForSdrLock(sdrLock, false, hideIanMateusCols, nome, crmArthurLuis, crmDoSuporte, page === 'novos_leads').reduce((sum, c) => sum + columnWidth(c, columnWidths), 0)
     return CHECKBOX_COL_WIDTH + Math.max(larguraDe(''), ...boards.map((b) => larguraDe(b.name)))
   }, [columnWidths, sdrLock, hideIanMateusCols, crmArthurLuis, crmDoSuporte, boards])
 
@@ -1688,9 +1745,9 @@ export function LeadBoardsView({ page, tituloDaTela, aoLadoDoTitulo }: LeadBoard
 
   const visibleRows = React.useMemo(
     () => pageRows.filter((r) =>
-      matchesSearch(r, search) && (!sdrFilter || r.sdr === sdrFilter) && matchesLeadFilters(r, filterRules),
+      matchesSearch(r, search) && (!sdrFilter || r.sdr === sdrFilter) && passaNaPrioridade(r.prioridade, prioridadeFilter) && matchesLeadFilters(r, filterRules),
     ),
-    [pageRows, search, sdrFilter, filterRules],
+    [pageRows, search, sdrFilter, prioridadeFilter, filterRules],
   )
   const visibleCount = visibleRows.length
 
@@ -1859,7 +1916,8 @@ export function LeadBoardsView({ page, tituloDaTela, aoLadoDoTitulo }: LeadBoard
               {!crmDoSuporte && page !== 'crm-arthur' && page !== 'crm-luis-closer' && <SdrFilterButton value={sdrFilter} onChange={setSdrFilter} rotulo="SDR" />}
               </>
               )}
-              {/* Novos Leads: sem o Filtro (pedido de 12/11). */}
+              {/* Novos Leads: sem o Filtro (pedido de 12/11); só o seletor de Prioridade. */}
+              {page === 'novos_leads' && <PrioridadeFilterButton value={prioridadeFilter} onChange={setPrioridadeEscolhida} />}
               {!kanbanIan && page !== 'novos_leads' && (
                 <ToolbarButton
                   icon={<Filter className="h-3.5 w-3.5" />}
@@ -1906,6 +1964,7 @@ export function LeadBoardsView({ page, tituloDaTela, aoLadoDoTitulo }: LeadBoard
                       allBoards={boards}
                       search={search}
                       sdrFilter={sdrFilter}
+                      prioridadeFilter={prioridadeFilter}
                       filterRules={filterRules}
                       focusRowId={focusRowId}
                       onFocused={() => setFocusRowId(null)}

@@ -623,6 +623,7 @@ const ESPELHO_CAMPOS = [
 const COPIA_LEVA = [
   ...ESPELHO_CAMPOS.filter((c) => c !== 'origem'),
   'meta_campaign_id', 'meta_adset_id', 'meta_ad_id', 'origem_campanha', 'qualificacao', 'lead_raw',
+  'prioridade', 'site_empresa',
   'notes_count', 'last_note_preview', 'last_note_at',
 ];
 const ORIGEM_DA_COPIA = `COALESCE(NULLIF(o.origem, ''), CASE WHEN o.meta_lead_id IS NOT NULL OR o.meta_campaign_id IS NOT NULL

@@ -44,6 +44,7 @@ function boardToRow(patch: Partial<LeadBoard>): Record<string, unknown> {
 }
 
 type LeadRowRow = {
+  prioridade?: string | null; site_empresa?: string | null
   id: string; board_id: string; nome: string; tipo: string; categoria?: string; etiqueta?: string; followup?: string; disparo?: string; origem?: string; agendado_por?: string; nicho?: string; motivo_desqualificacao?: string; empresa: string; telefone: string
   dia_contato: string; ligacao: string; status: string; agendamento: string; retornar: string; retornado: boolean
   responsavel: string
@@ -75,7 +76,7 @@ function rowToLead(r: LeadRowRow): LeadRow {
     agendamento: r.agendamento ?? '', retornar: r.retornar,
     retornado: r.retornado ?? false,
     responsavel: r.responsavel, sdr: r.sdr, numero: r.numero,
-    dorCliente: r.dor_cliente, numeroAtendentes: r.numero_atendentes,
+    dorCliente: r.dor_cliente, numeroAtendentes: r.numero_atendentes, prioridade: r.prioridade ?? '', siteEmpresa: r.site_empresa ?? '',
     valorMrr: r.valor_mrr, valorImplementacao: r.valor_implementacao, fidelidade: r.fidelidade ?? '', notesCount: r.notes_count ?? 0,
     fechamento: r.fechamento ?? '',
     vendaOrigemId: r.venda_origem_id ?? null,
@@ -261,7 +262,7 @@ function buildAndPostRow(boardId: string, initial?: Partial<LeadRow>): { row: Le
   const row: LeadRow = {
     id: uuid(), boardId, nome: '', tipo: '', categoria: '', etiqueta: '', followup: '', disparo: '', origem: '', agendadoPor: '', nicho: '', motivoDesqualificacao: '', empresa: '', telefone: '', diaContato: '', ligacao: '0',
     status: '', agendamento: '', retornar: '', retornado: false, responsavel: '', sdr: '', numero: '',
-    dorCliente: '', numeroAtendentes: '', valorMrr: '', valorImplementacao: '', fidelidade: '', notesCount: 0,
+    dorCliente: '', numeroAtendentes: '', prioridade: '', siteEmpresa: '', valorMrr: '', valorImplementacao: '', fidelidade: '', notesCount: 0,
     fechamento: '', vendaOrigemId: null, vendaRevertida: false, espelhoOrigemId: null, copiaIaOrigemId: null, espelhoOrigensExtras: [], entrouColunaEm: now, ticketNx: '', closer: '',
     lastNotePreview: '', lastNoteAt: null,
     position, createdAt: now, updatedAt: now, deletedAt: null, deleteReason: null,

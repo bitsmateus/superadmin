@@ -44,7 +44,8 @@ export function dataDoAviso(agendamento: string): string {
 
 /** Nº de atendentes é texto livre: "7" vira "7 atendentes"; "4 a 10 atendentes" fica como está. */
 function atendentesDoAviso(v: string): string {
-  const t = (v ?? '').trim();
+  // Resposta do formulário do Meta vem com "_" no lugar do espaço ("4_a_10_atendentes").
+  const t = (v ?? '').replace(/_+/g, ' ').trim();
   if (!t) return SEM_INFO;
   return /^\d+(\s*(a|-|até)\s*\d+)?$/i.test(t) ? `${t} atendentes` : t;
 }

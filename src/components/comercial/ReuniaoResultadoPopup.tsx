@@ -1,3 +1,4 @@
+import { formatarResposta } from '@/lib/respostaMeta'
 import * as React from 'react'
 import { TelefoneAcoes } from '@/components/comercial/TelefoneAcoes'
 import { createPortal } from 'react-dom'
@@ -125,7 +126,7 @@ export function ReuniaoResultadoPopup() {
         </dl>
         {(atual.dor || atual.resumo) && (
           <div className="mt-3 space-y-1 rounded-lg bg-elevate/[0.04] px-3 py-2 text-sm text-foreground">
-            {atual.dor && <p><span className="text-foreground/45">Dor: </span>{atual.dor}</p>}
+            {atual.dor && <p><span className="text-foreground/45">Dor: </span>{formatarResposta(atual.dor)}</p>}
             {atual.resumo && <p className="line-clamp-3 text-foreground/70"><span className="text-foreground/45">Última atualização: </span>{atual.resumo}</p>}
           </div>
         )}

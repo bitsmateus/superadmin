@@ -1,4 +1,5 @@
 import { enviarBoasVindasLead } from '../lib/leadWelcome.js';
+import { lerPrazoESite } from '../lib/formularioMeta.js';
 import { avisarContratoAssinado } from '../lib/avisoContratoAssinado.js';
 import { nichoDoFormulario } from '../lib/trafegoNicho.js';
 import { FastifyInstance } from 'fastify';
@@ -143,6 +144,10 @@ export async function webhookRoutes(app: FastifyInstance) {
       tipo?: string;
       dor_cliente?: string;
       numero_atendentes?: string;
+      /** Opcionais (sem validação de tipo no schema): ver lib/formularioMeta.ts. */
+      prazo?: unknown;
+      prioridade?: unknown;
+      site_empresa?: unknown;
       raw?: Record<string, unknown>;
     };
   }>(
@@ -218,6 +223,8 @@ export async function webhookRoutes(app: FastifyInstance) {
       const campanha = typeof raw.campaign_name === 'string' ? raw.campaign_name : '';
       const conjunto = typeof raw.adset_name === 'string' ? raw.adset_name : '';
       const origemCampanha = [campanha, conjunto].filter(Boolean).join(' / ');
+      // Prazo e Instagram/site: do topo do payload ou, sem eles, da pergunta correspondente no raw.
+      const { prioridade, siteEmpresa } = lerPrazoESite(req.body as Record<string, unknown>);
       // IDs do Meta podem chegar como string ou número; vazio vira NULL (chave do cruzamento com o gasto).
       const metaId = (v: unknown): string | null => {
         const s = typeof v === 'string' || typeof v === 'number' ? String(v).trim() : '';
@@ -263,8 +270,8 @@ export async function webhookRoutes(app: FastifyInstance) {
           board_id, nome, empresa, telefone, position,
           meta_lead_id, origem_campanha, qualificacao, lead_raw,
           dor_cliente, numero_atendentes, tipo,
-          meta_campaign_id, meta_adset_id, meta_ad_id, nicho, origem
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'meta')
+          meta_campaign_id, meta_adset_id, meta_ad_id, nicho, origem, prioridade, site_empresa
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'meta',$17,$18)
         ON CONFLICT (meta_lead_id) WHERE meta_lead_id IS NOT NULL DO NOTHING
         RETURNING *`,
         [
@@ -272,6 +279,7 @@ export async function webhookRoutes(app: FastifyInstance) {
           leadId, origemCampanha, JSON.stringify(qualificacao), JSON.stringify(raw),
           req.body.dor_cliente ?? '', req.body.numero_atendentes ?? '', req.body.tipo ?? '',
           metaId(raw.campaign_id), metaId(raw.adset_id), metaId(raw.ad_id), nichoDoFormulario(qualificacao),
+          prioridade, siteEmpresa,
         ]
       );
 

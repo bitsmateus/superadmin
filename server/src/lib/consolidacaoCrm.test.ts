@@ -36,24 +36,48 @@ test('quadro sem correspondente vira problema e não é inventado', () => {
 test('A) closer com par no ARTHUR (cópia ou telefone): closer arquivado, ARTHUR sem mudança; sem par: move como está', () => {
   const r = plano([
     lead('a1', 'a-agendada', { telefone: '54999991111', nome: 'Ana' }),
-    lead('a2', 'a-novos', { telefone: '54988882222', nome: 'Bia' }),
+    lead('a2', 'a-agendada', { telefone: '54988882222', nome: 'Bia' }),
     lead('c1', 'c-follow', { telefone: '', espelho_origem_id: 'a1', empresa: 'Loja' }),
     lead('c2', 'c-agendada', { telefone: '5488882222', nome: 'Outro nome' }),
     lead('c3', 'c-agendada', { telefone: '54977773333' }),
   ]);
   assert.deepEqual(r.closerArquivados.map((c) => [c.closer.id, c.arthur.id, c.motivo]), [['c1', 'a1', 'cópia automática'], ['c2', 'a2', 'mesmo telefone']]);
   assert.deepEqual(r.closerMovidos.map((c) => c.id), ['c3']);
+  assert.deepEqual(r.closerEtapaDiferente, []);
   assert.deepEqual(r.luisDuplicados, []);
   assert.deepEqual(r.total, { destinoAntes: 2, doLuis: 0, doCloser: 3, arquivados: 2, esperadoNoFinal: 3 });
 });
 
-test('A) closer sem cópia e com dois cards do ARTHUR no telefone: não escolhe, vira problema', () => {
+test('A) closer só por telefone: par é o da mesma etapa; etapa diferente move e lista; dois na mesma etapa: limpar depois', () => {
   const r = plano([
     lead('a1', 'a-novos', { telefone: '54999991111' }), lead('a2', 'a-follow', { telefone: '54999991111' }),
-    lead('c1', 'c-agendada', { telefone: '54999991111' }),
+    lead('c1', 'c-follow', { telefone: '54999991111' }),
+    lead('a3', 'a-follow', { telefone: '54988887777' }),
+    lead('c2', 'c-agendada', { telefone: '54988887777' }),
+    lead('a4', 'a-agendada', { telefone: '54955556666' }), lead('a5', 'a-agendada', { telefone: '54955556666' }),
+    lead('c3', 'c-agendada', { telefone: '54955556666' }),
+    lead('a6', 'a-follow', { telefone: '54944443333' }),
+    lead('c4', 'c-agendada', { telefone: '', espelho_origem_id: 'a6' }),
   ]);
-  assert.equal(r.closerAmbiguos.length, 1);
-  assert.match(r.problemas.join(' '), /decidir qual é o par/);
+  assert.deepEqual(r.closerArquivados.map((c) => [c.closer.id, c.arthur.id, c.motivo]), [['c1', 'a2', 'mesmo telefone'], ['c4', 'a6', 'cópia automática']]);
+  assert.deepEqual(r.closerEtapaDiferente.map((x) => [x.closer.id, x.arthur.id]), [['c2', 'a3']]);
+  assert.deepEqual(r.limparDepois.map((x) => [x.lead.id, x.candidatos.map((c) => c.id)]), [['c3', ['a4', 'a5']]]);
+  assert.deepEqual(r.problemas, []);
+  assert.deepEqual(r.acoes.mover.map((m) => m.id).sort(), ['c2', 'c3']);
+  assert.deepEqual(r.acoes.juntar.map((j) => [j.sai, j.fica]), [['c1', 'a2'], ['c4', 'a6']]);
+});
+
+test('B) LUIS com dois cards do ARTHUR de mesmo nome: junta no da mesma etapa; dois na mesma etapa: limpar depois', () => {
+  const r = plano([
+    lead('a1', 'a-novos', { telefone: '54911112222', nome: 'Emily' }), lead('a2', 'a-agendada', { telefone: '54911112222', nome: 'Emily R' }),
+    lead('l1', 'l-agendada', { telefone: '54911112222', nome: 'emily' }),
+    lead('a3', 'a-novos', { telefone: '54933332222', nome: 'Fagna' }), lead('a4', 'a-novos', { telefone: '54933332222', nome: 'Fagna' }),
+    lead('l2', 'l-novos', { telefone: '54933332222', nome: 'Fagna' }),
+  ]);
+  assert.deepEqual(r.luisDuplicados.map((d) => [d.sai.id, d.fica.id]), [['l1', 'a2']]);
+  assert.deepEqual(r.limparDepois.map((x) => x.lead.id), ['l2']);
+  assert.deepEqual(r.problemas, []);
+  assert.equal(r.total.esperadoNoFinal, 5);
 });
 
 test('B) LUIS: duplicado só com telefone E primeiro nome; etapa diferente não junta; completa só vazios, nunca retornar/agendamento/calendar_event_id', () => {

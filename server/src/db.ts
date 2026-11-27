@@ -2461,6 +2461,8 @@ END; $$`);
     executada_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     por TEXT NOT NULL DEFAULT ''
   )`);
+  // O resultado da execução (contagens, conferência, nomes das tabelas de backup), pra tela mostrar depois.
+  await pool.query(`ALTER TABLE crm_consolidacao ADD COLUMN IF NOT EXISTS resultado JSONB`);
 
   // Rotina do dia (checklist do botão "Rotina" no CRM do SDR e do closer, ver routes/rotina.ts e lib/rotina.ts). A
   // rotina é da aba (crm-arthur, crm-luis-closer): quem marca é o dono da aba, pelo nome (a mesma regra do sininho).

@@ -1,10 +1,12 @@
 /**
- * SIMULAÇÃO da consolidação dos CRMs (CRM LUIS e CRM LUIS CLOSER -> CRM ARTHUR). Só lê: tudo roda numa transação
- * READ ONLY, então o banco recusa qualquer escrita daqui. Só administrador. A execução não existe nesta rota.
+ * Consolidação dos CRMs (CRM LUIS e CRM LUIS CLOSER -> CRM ARTHUR), só administrador.
+ *  - SIMULAÇÃO: só lê (transação READ ONLY, o banco recusa qualquer escrita) e devolve o plano e a assinatura dele.
+ *  - EXECUÇÃO: só com a assinatura da simulação aprovada e a confirmação digitada; ver lib/consolidacaoExecucao.ts.
  */
 import { FastifyInstance } from 'fastify';
 import type { PoolClient } from 'pg';
-import { withTransaction } from '../db.js';
+import { queryOne, withTransaction } from '../db.js';
+import { assinaturaDoPlano, ErroDaConsolidacao, executarConsolidacao, textoDoResultado, type ResultadoDaExecucao } from '../lib/consolidacaoExecucao.js';
 import { montarPlano, PAGINA_CLOSER, PAGINA_DESTINO, PAGINAS_PROTEGIDAS, type Aba, type Etiqueta, type Lead, type Quadro } from '../lib/consolidacaoCrm.js';
 import { textoDoRelatorio, type ReferenciasDoBanco } from '../lib/consolidacaoCrmTexto.js';
 import { restrictedBoardFilter } from './leadBoards.js';
@@ -13,7 +15,7 @@ import { agentesPorAba } from './ligacoes3c.js';
 
 const iso = (v: unknown): string => (v instanceof Date ? v.toISOString() : typeof v === 'string' ? v : '');
 
-async function lerTudo(db: PoolClient) {
+export async function lerTudo(db: PoolClient) {
   const linhas = async <T>(sql: string, params: unknown[] = []) => (await db.query(sql, params)).rows as T[];
   const abas = await linhas<Aba>('SELECT id, name, (archived_at IS NOT NULL) AS arquivada FROM lead_pages');
   const quadros = await linhas<Quadro>('SELECT id, name, page, position FROM lead_boards WHERE NOT is_vendas AND NOT is_contrato');
@@ -106,6 +108,39 @@ export async function consolidacaoCrmRoutes(app: FastifyInstance) {
     }
     const geradoEm = new Date().toISOString();
     const referenciasDoBanco: ReferenciasDoBanco = { pessoas, doArthur: refs.doArthur, ambiente: refs.ambiente };
-    return { geradoEm, plano, referencias: referenciasDoBanco, texto: textoDoRelatorio(plano, referenciasDoBanco, geradoEm) };
+    const assinatura = assinaturaDoPlano(plano);
+    return {
+      geradoEm, plano, assinatura, referencias: referenciasDoBanco,
+      texto: `${textoDoRelatorio(plano, referenciasDoBanco, geradoEm)}\n\nAssinatura deste plano: ${assinatura}`,
+    };
   });
+
+  // GET — já foi executada? (e o resultado, se sim)
+  app.get('/api/admin/consolidacao-crm/estado', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const { role } = req.user as { role?: string };
+    if (role !== 'admin') return reply.status(403).send({ message: 'Só administrador.' });
+    const r = await queryOne<{ resultado: ResultadoDaExecucao | null }>('SELECT resultado FROM crm_consolidacao');
+    return r ? { executada: true, texto: r.resultado ? textoDoResultado(r.resultado) : 'Executada.' } : { executada: false };
+  });
+
+  // POST { assinatura, confirmacao: 'CONSOLIDAR' } — executa numa transação só. Qualquer falha desfaz tudo.
+  app.post<{ Body: { assinatura?: string; confirmacao?: string } }>(
+    '/api/admin/consolidacao-crm/executar', { onRequest: [app.authenticate] }, async (req, reply) => {
+      const { role, sub } = req.user as { role?: string; sub: string };
+      if (role !== 'admin') return reply.status(403).send({ message: 'Só administrador.' });
+      if (req.body?.confirmacao !== 'CONSOLIDAR') return reply.status(400).send({ message: 'Digite CONSOLIDAR pra confirmar.' });
+      if (!req.body?.assinatura) return reply.status(400).send({ message: 'Rode a simulação antes (falta a assinatura).' });
+      const perfil = await queryOne<{ name: string | null; email: string }>('SELECT name, email FROM profiles WHERE id = $1', [sub]);
+      try {
+        const resultado = await withTransaction((db) => executarConsolidacao(db, lerTudo, {
+          assinatura: req.body.assinatura!, por: perfil?.name || perfil?.email || 'admin',
+        }));
+        return { resultado, texto: textoDoResultado(resultado) };
+      } catch (err) {
+        if (err instanceof ErroDaConsolidacao) return reply.status(409).send({ message: err.message });
+        req.log.error({ err }, '[consolidacao] falha ao executar — nada foi gravado');
+        return reply.status(500).send({ message: `Falhou e nada foi gravado: ${err instanceof Error ? err.message : 'erro'}` });
+      }
+    },
+  );
 }

@@ -46,6 +46,8 @@ export interface Duplicado {
 
 export interface Plano {
   problemas: string[];
+  /** Ids de cada aba envolvida e dos quadros dela (pra ajustar integrações). */
+  ids: { aba: string; id: string; quadros: { nome: string; id: string }[] }[];
   destino: { id: string; nomeAtual: string; nomeNovo: string } | null;
   origens: { id: string; nome: string }[];
   protegidas: { id: string; nome: string; leads: number }[];
@@ -312,6 +314,10 @@ export function montarPlano({ abas, quadros, etiquetas, leads }: Entrada): Plano
 
   return {
     problemas: [...new Set(problemas)],
+    ids: [PAGINA_DESTINO, ...idsOrigem, ...PAGINAS_PROTEGIDAS].filter((id) => abaPorId.has(id)).map((id) => ({
+      aba: abaPorId.get(id)!.name, id,
+      quadros: quadros.filter((q) => q.page === id).sort((a, b) => a.position - b.position).map((q) => ({ nome: q.name, id: q.id })),
+    })),
     destino: destino ? { id: destino.id, nomeAtual: destino.name, nomeNovo: NOVO_NOME } : null,
     origens: origens.map((a) => ({ id: a.id, nome: a.name })),
     protegidas: PAGINAS_PROTEGIDAS.filter((id) => abaPorId.has(id))

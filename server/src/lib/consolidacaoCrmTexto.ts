@@ -29,6 +29,12 @@ export function textoDoRelatorio(p: Plano, r: ReferenciasDoBanco, geradoEm: stri
   L.push(`Responsável passa a ser Luis em ${p.responsavelMuda} lead(s). Coluna SDR não muda: ${p.porSdr.map((s) => `${s.sdr} ${s.leads}`).join(', ') || '—'}.`);
   L.push(`Não são tocados: ${p.protegidas.map((x) => `${x.nome} (${x.leads} leads)`).join(', ') || '—'}.`);
 
+  titulo('Ids das abas e dos quadros');
+  for (const a of p.ids) {
+    L.push(`- ${a.aba}: ${a.id}`);
+    for (const q of a.quadros) L.push(`    ${q.nome}: ${q.id}`);
+  }
+
   titulo('Leads por aba e quadro');
   for (const c of p.contagem) L.push(`- ${c.aba} / ${c.quadro}: ${c.ativos}${c.naLixeira ? ` (+${c.naLixeira} na lixeira, ficam onde estão)` : ''}`);
 

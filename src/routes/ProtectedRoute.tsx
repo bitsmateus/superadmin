@@ -12,7 +12,7 @@ import type { SupportPage } from '@/services/supportPages'
 /** Links antigos de aba que só redirecionam pra rota nova (onde a trava é aplicada de novo). */
 const ABAS_QUE_SO_REDIRECIONAM = new Set(['novos-leads', 'crm-nx-luis', 'crm-nx-arthur', 'vendas', 'contrato'])
 
-type Contexto = {
+export type Contexto = {
   allowed: Set<string>
   pages: LeadPage[]
   pagesBooted: boolean
@@ -28,9 +28,11 @@ const casa = (path: string, base: string) => path === base || path.startsWith(ba
  * Usuário RESTRITO só abre o que está marcado em Permissões. É uma lista fechada: o que não está liberado
  * aqui não abre, mesmo digitando o endereço. 'carregando' = ainda falta saber quais abas a pessoa tem.
  */
-function liberadoParaRestrito(path: string, c: Contexto): boolean | 'carregando' {
+export function liberadoParaRestrito(path: string, c: Contexto): boolean | 'carregando' {
+  // A tela inicial (InicioPage) é de todo mundo: ela só mostra o que a pessoa pode abrir. O Dashboard do Suporte,
+  // que antes era a raiz, mora em /dashboard-suporte e vale a marca "dashboard" (pela lista abaixo).
+  if (path === '/') return true
   // Telas com marca (Suporte, NX Digital, Agenda, Dashboard Comercial)
-  if (path === '/') return c.allowed.has('dashboard')
   // CRM do suporte dentro do Pipeline (aba de Demandas): vale a aba liberada, como em /demandas/:id.
   const crm = path.match(/^\/pipeline\/crm\/([^/]+)\/?$/)
   if (crm) return c.pagesBooted ? c.pages.some((p) => p.id === crm[1]) : 'carregando'

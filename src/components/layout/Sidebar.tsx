@@ -13,6 +13,7 @@ import {
   Contact,
   Copy,
   FileSearch,
+  Home,
   Megaphone,
   FileText,
   BarChart3,
@@ -84,6 +85,8 @@ import { SinoDeNotificacoes } from '@/components/notificacoes/SinoDeNotificacoes
 // Pipeline (ver PipelineSectionTabs), não mais como item próprio do menu. A rota continua
 // funcionando normal (por isso segue em SUPORTE_ROUTES, pra "Suporte" acender como seção ativa).
 const suporteItems = [
+  // O Dashboard do Suporte saiu da raiz (/ é a tela inicial de todo mundo) e virou item do grupo.
+  { to: '/dashboard-suporte', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/pipeline', label: 'Pipeline', icon: Columns3 },
   { to: '/clients', label: 'Clientes', icon: Users },
   { to: '/followups', label: 'Follow-ups', icon: Bell },
@@ -94,7 +97,7 @@ const suporteItems = [
   { to: '/comunicados', label: 'Comunicados', icon: Newspaper },
 ]
 
-const SUPORTE_ROUTES = ['/', '/tarefas', '/pipeline', '/clients', '/followups', '/agenda', '/atendimento', '/canais', '/tenants', '/comunicados', '/nps', '/risco-churn', '/relatorios']
+const SUPORTE_ROUTES = ['/dashboard-suporte', '/tarefas', '/pipeline', '/clients', '/followups', '/agenda', '/atendimento', '/canais', '/tenants', '/comunicados', '/nps', '/risco-churn', '/relatorios']
 
 /** Intercala cópias ("Duplicar") logo depois do item original de cada rota. A cópia herda só o
  * ícone; o nome, o id e a ROTA são próprios dela: `/visao/<id>`, que abre a mesma tela do original
@@ -345,7 +348,7 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
   const supportPages = useSupportPages()
   const supportPagesBooted = useSupportPagesBooted()
   const isSupportPageVisible = React.useCallback((to: string) => {
-    if (to === '/' || !supportPagesBooted) return true
+    if (to === '/' || to === '/dashboard-suporte' || !supportPagesBooted) return true
     const key = MENU_KEY_BY_PATH[to]
     if (!key) return true
     return supportPages.some((p) => p.id === key)
@@ -558,6 +561,25 @@ export function Sidebar({ open, onClose, onToggle }: SidebarProps) {
       </div>
 
       <nav className="mt-2 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-3 pb-4">
+        {/* Início: a tela de entrada (atalhos, páginas recentes e as demandas da pessoa). */}
+        <NavLink
+          to="/"
+          end
+          onClick={closeOnMobile}
+          className={({ isActive }) =>
+            cn(
+              'group mb-1 flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors',
+              isActive ? 'bg-elevate/[0.05] text-foreground' : 'text-foreground/55 hover:bg-elevate/[0.03] hover:text-foreground/90',
+            )
+          }
+        >
+          {({ isActive }) => (
+            <>
+              <Home className={cn('h-4 w-4 shrink-0', isActive ? 'text-accent' : 'text-foreground/50 group-hover:text-foreground/75')} />
+              <span>Início</span>
+            </>
+          )}
+        </NavLink>
         {/* Fixados — o que a própria pessoa marcou com o alfinete, sempre no topo de tudo e com
             um tom de cor próprio (âmbar) pra se diferenciar do resto do menu. */}
         {pinnedItems.length > 0 && (

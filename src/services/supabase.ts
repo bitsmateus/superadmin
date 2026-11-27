@@ -36,6 +36,8 @@ export interface Profile {
   /** Itens do menu que essa pessoa fixou (chave do item — ver chaveDoItem em Sidebar.tsx).
    * Ausente/vazio = nada fixado. Aparecem num grupo "Fixados" no topo do menu. */
   pinnedMenu?: string[] | null
+  /** Tela inicial: os 3 atalhos e o acesso rápido que a pessoa escolheu (caminhos). Ausente = padrão da área dela. */
+  homePrefs?: { atalhos: string[]; acessoRapido: string[] } | null
   created_at: string
 }
 

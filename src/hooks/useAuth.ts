@@ -212,6 +212,21 @@ export async function saveOwnPinnedMenu(pinnedMenu: string[]) {
   }
 }
 
+/** Salva os atalhos e o acesso rápido da tela inicial. Mesmo padrão dos fixados: aplica na hora e salva depois. */
+export async function saveOwnHomePrefs(homePrefs: { atalhos: string[]; acessoRapido: string[] }) {
+  const profile = state.profile
+  if (!profile) return
+  setState({ profile: { ...profile, homePrefs } })
+  try {
+    const updated = await api.patch<Profile>(`/api/users/${profile.id}`, { homePrefs })
+    const junto = juntarPerfil(state.profile ?? updated, updated)
+    setCurrentProfile(junto)
+    setState({ profile: junto })
+  } catch {
+    toast.error('Não deu pra salvar a sua tela inicial. Tente de novo.')
+  }
+}
+
 // For components that previously used supabase.auth.updateUser
 export async function updateCurrentUser(updates: { name?: string; password?: string }) {
   const profile = state.profile

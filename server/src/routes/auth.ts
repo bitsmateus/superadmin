@@ -3,6 +3,7 @@ import { FastifyInstance } from 'fastify';
 import bcrypt from 'bcrypt';
 import { query, queryOne } from '../db.js';
 import { getOnlineUserIds, broadcastToUser } from '../sse.js';
+import { limparPreferenciasDaInicio, type PreferenciasDaInicio } from '../lib/preferenciasDaInicio.js';
 
 interface Profile {
   id: string;
@@ -20,6 +21,8 @@ interface Profile {
   sidebarOrder: Record<string, string[]> | null;
   /** Itens do menu fixados por essa pessoa (chave do item) — aparecem num grupo "Fixados" no topo. */
   pinnedMenu: string[] | null;
+  /** Tela inicial: os 3 atalhos e o acesso rápido que a pessoa escolheu (caminhos das telas). */
+  homePrefs: PreferenciasDaInicio | null;
   created_at: string;
   /** Só preenchido quando restrictAccess=true — os itens de menu que esse usuário pode ver. */
   menuAccess?: string[];
@@ -45,7 +48,7 @@ export async function authRoutes(app: FastifyInstance) {
       const { email, password } = req.body;
       const profile = await queryOne<Profile & { password_hash: string; suspended_at: string | null }>(
         `SELECT id, email, name, role, area, restrict_access AS "restrictAccess", theme,
-                sidebar_order AS "sidebarOrder", pinned_menu AS "pinnedMenu", created_at, password_hash, suspended_at
+                sidebar_order AS "sidebarOrder", pinned_menu AS "pinnedMenu", home_prefs AS "homePrefs", created_at, password_hash, suspended_at
          FROM profiles WHERE lower(email) = lower($1)`,
         [email.trim()]
       );
@@ -70,7 +73,8 @@ export async function authRoutes(app: FastifyInstance) {
     const { sub } = req.user as { sub: string };
     const profile = await queryOne<Profile>(
       `SELECT id, email, name, role, area, restrict_access AS "restrictAccess", theme,
-              sidebar_order AS "sidebarOrder", pinned_menu AS "pinnedMenu", created_at FROM profiles WHERE id = $1`,
+              sidebar_order AS "sidebarOrder", pinned_menu AS "pinnedMenu", home_prefs AS "homePrefs", created_at
+       FROM profiles WHERE id = $1`,
       [sub]
     );
     if (!profile) return reply.status(404).send({ message: 'Usuário não encontrado' });
@@ -117,13 +121,19 @@ export async function authRoutes(app: FastifyInstance) {
   );
 
   // PATCH /api/users/:id
-  app.patch<{ Params: { id: string }; Body: { name?: string; email?: string; role?: string; area?: string; restrictAccess?: boolean; password?: string; theme?: 'light' | 'dark'; sidebarOrder?: Record<string, string[]>; pinnedMenu?: string[] } }>(
+  app.patch<{ Params: { id: string }; Body: { name?: string; email?: string; role?: string; area?: string; restrictAccess?: boolean; password?: string; theme?: 'light' | 'dark'; sidebarOrder?: Record<string, string[]>; pinnedMenu?: string[]; homePrefs?: unknown } }>(
     '/api/users/:id',
     { onRequest: [app.authenticate] },
     async (req, reply) => {
       const { sub, role: actorRole } = req.user as { sub: string; role: string };
       const { id } = req.params;
       const { name, email, role, area, restrictAccess, password, theme, sidebarOrder, pinnedMenu } = req.body;
+      // A tela inicial é da pessoa, igual ao menu: só a própria.
+      if (req.body.homePrefs !== undefined && id !== sub) {
+        return reply.status(403).send({ message: 'Só é possível alterar a própria tela inicial' });
+      }
+      const homePrefs = req.body.homePrefs === undefined ? undefined : limparPreferenciasDaInicio(req.body.homePrefs);
+      if (homePrefs === null) return reply.status(400).send({ message: 'Preferências da tela inicial inválidas.' });
 
       // Tema é preferência pessoal — qualquer um pode mudar o PRÓPRIO, mas não o de outra pessoa
       // (nem admin edita o tema de outro usuário por essa rota).
@@ -168,6 +178,7 @@ export async function authRoutes(app: FastifyInstance) {
       if (theme !== undefined) { sets.push(`theme = $${i++}`); params.push(theme); }
       if (sidebarOrder !== undefined) { sets.push(`sidebar_order = $${i++}`); params.push(JSON.stringify(sidebarOrder)); }
       if (pinnedMenu !== undefined) { sets.push(`pinned_menu = $${i++}`); params.push(JSON.stringify(pinnedMenu)); }
+      if (homePrefs !== undefined) { sets.push(`home_prefs = $${i++}`); params.push(JSON.stringify(homePrefs)); }
       if (password !== undefined) {
         const hash = await bcrypt.hash(password, 10);
         sets.push(`password_hash = $${i++}`);
@@ -179,7 +190,7 @@ export async function authRoutes(app: FastifyInstance) {
       const [updated] = await query<Profile>(
         `UPDATE profiles SET ${sets.join(', ')} WHERE id = $${i}
          RETURNING id, email, name, role, area, restrict_access AS "restrictAccess", theme,
-                   sidebar_order AS "sidebarOrder", pinned_menu AS "pinnedMenu", created_at`,
+                   sidebar_order AS "sidebarOrder", pinned_menu AS "pinnedMenu", home_prefs AS "homePrefs", created_at`,
         params
       );
       // Usuário (suporte) não tem "acesso total": qualquer edição o mantém restrito ao que estiver marcado.

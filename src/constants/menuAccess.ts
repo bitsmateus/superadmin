@@ -36,7 +36,8 @@ export const MENU_ACCESS_GROUP_LABEL: Record<MenuAccessGroup, string> = {
 // MENU_KEY (ver leadPages.ts/leadBoards.ts no servidor), só que agora é derivado: fica marcado
 // sozinho quando pelo menos uma aba está liberada, sem precisar de um checkbox próprio.
 export const MENU_ACCESS_ITEMS: MenuAccessItem[] = [
-  { key: 'dashboard', label: 'Dashboard', path: '/', group: 'suporte' },
+  // A raiz (/) virou a tela inicial de todo mundo; o Dashboard do Suporte tem endereço próprio (mesma marca).
+  { key: 'dashboard', label: 'Dashboard Suporte', path: '/dashboard-suporte', group: 'suporte' },
   { key: 'tarefas', label: 'Suporte (Tarefas)', path: '/tarefas', group: 'suporte' },
   { key: 'pipeline', label: 'Pipeline', path: '/pipeline', group: 'suporte' },
   { key: 'clientes', label: 'Clientes', path: '/clients', group: 'suporte' },

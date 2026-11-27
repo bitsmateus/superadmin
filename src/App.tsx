@@ -10,6 +10,9 @@ import { LoginPage } from './pages/LoginPage'
 const DashboardPage = React.lazy(() =>
   import('./pages/DashboardPage').then((m) => ({ default: m.DashboardPage })),
 )
+const InicioPage = React.lazy(() =>
+  import('./pages/InicioPage').then((m) => ({ default: m.InicioPage })),
+)
 const TenantsPage = React.lazy(() =>
   import('./pages/TenantsPage').then((m) => ({ default: m.TenantsPage })),
 )
@@ -295,7 +298,9 @@ export default function App() {
             </ProtectedRoute>
           }
         >
-          <Route index element={<DashboardPage />} />
+          {/* Tela inicial de todo mundo (atalhos, recentes, demandas da pessoa). O Dashboard do Suporte tem rota própria. */}
+          <Route index element={<InicioPage />} />
+          <Route path="/dashboard-suporte" element={<DashboardPage />} />
           <Route path="/pipeline" element={<PipelinePage />} />
           <Route path="/pipeline/crm/:pageId" element={<ComercialPage />} />
           <Route path="/canais" element={<CanaisPage />} />

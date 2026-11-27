@@ -5,7 +5,8 @@ import { useSupportView } from '@/components/support/SupportViewContext'
 import { SinoDeNotificacoes } from '@/components/notificacoes/SinoDeNotificacoes'
 
 const labels: Record<string, string> = {
-  '': 'Dashboard',
+  '': 'Início',
+  'dashboard-suporte': 'Dashboard Suporte',
   tenants: 'Tenants',
   atendimento: 'Monitor de Atendimento',
   clients: 'Clientes',
@@ -63,7 +64,7 @@ export function TopBar({ rightSlot, title, subtitle, titleClassName, titleAddon,
 
   const heading =
     title ??
-    (parts.length === 0 ? 'Dashboard' : labels[parts[0]] ?? 'Página')
+    (parts.length === 0 ? 'Início' : labels[parts[0]] ?? 'Página')
 
   return (
     <header className="sticky top-0 z-20 border-b border-line bg-bg/85 backdrop-blur-md">

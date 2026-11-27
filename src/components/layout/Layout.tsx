@@ -13,6 +13,7 @@ import { RetornoPropostaPopup } from '@/components/comercial/RetornoPropostaPopu
 import { PopupDeNotificacoes } from '@/components/notificacoes/PopupDeNotificacoes'
 import { LembreteDeNotificacoes } from '@/components/notificacoes/LembreteDeNotificacoes'
 import { useVisualNovo } from '@/lib/visualNovo'
+import { useRegistrarPaginaRecente } from '@/hooks/usePaginasDaInicio'
 
 const isDesktop = () =>
   typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches
@@ -23,6 +24,8 @@ export function Layout() {
   usePushSubscription()
   // Visual novo (vidro) em todas as telas internas — ver lib/visualNovo.ts.
   useVisualNovo(useLocation().pathname)
+  // "Páginas recentes" da tela inicial.
+  useRegistrarPaginaRecente()
 
   // Aberto por padrão no desktop, fechado no celular/tablet.
   const [open, setOpen] = React.useState(isDesktop)

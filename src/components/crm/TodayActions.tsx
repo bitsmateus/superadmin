@@ -63,12 +63,14 @@ function clientOwners(c: {
   return out
 }
 
-export function TodayActions() {
+/** `somenteMeus`: só as da pessoa logada, sem os filtros (é assim na tela inicial). */
+export function TodayActions({ somenteMeus = false }: { somenteMeus?: boolean } = {}) {
   const clients = useClients()
   const [currentUser] = useCurrentUser()
   const settings = useSettings()
   const [openId, setOpenId] = React.useState<string | null>(null)
-  const [filter, setFilter] = React.useState<string>('all') // 'all' | 'mine' | <nome>
+  const [filterEscolhido, setFilter] = React.useState<string>('all') // 'all' | 'mine' | <nome>
+  const filter = somenteMeus ? 'mine' : filterEscolhido
 
   const alerts = React.useMemo(
     () => computeAlerts(clients, settings.slaByStage),
@@ -109,9 +111,9 @@ export function TodayActions() {
             <ListTodo className="h-3.5 w-3.5" />
           </span>
           <div className="min-w-0">
-            <h3 className="text-sm font-medium text-foreground">Minhas tarefas</h3>
+            <h3 className="text-sm font-medium text-foreground">{somenteMeus ? 'Meus clientes' : 'Minhas tarefas'}</h3>
             <p className="text-[11px] text-foreground/45">
-              O que precisa de atenção, por ordem de urgência
+              {somenteMeus ? 'Clientes em que você é responsável, por urgência' : 'O que precisa de atenção, por ordem de urgência'}
             </p>
           </div>
           <Badge tone={actions.length === 0 ? 'neutral' : 'warning'} dot={actions.length > 0}>
@@ -119,7 +121,7 @@ export function TodayActions() {
           </Badge>
         </div>
 
-        <div className="flex flex-wrap items-center gap-1.5">
+        {!somenteMeus && <div className="flex flex-wrap items-center gap-1.5">
           <FilterChip active={filter === 'all'} onClick={() => setFilter('all')}>
             Todos
           </FilterChip>
@@ -140,7 +142,7 @@ export function TodayActions() {
               ))}
             </select>
           )}
-        </div>
+        </div>}
       </header>
 
       {actions.length === 0 ? (

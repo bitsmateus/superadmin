@@ -214,6 +214,8 @@ export async function runMigrations() {
   // Itens do menu que essa pessoa fixou (aparecem num grupo "Fixados" no topo) — array de chaves
   // (mesma chave usada em sidebar_order: pageId ou o "to" da rota).
   await pool.query(`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS pinned_menu JSONB`);
+  // Tela inicial da pessoa: { atalhos: [caminho x3], acessoRapido: [caminho...] } (ver src/pages/InicioPage.tsx).
+  await pool.query(`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS home_prefs JSONB`);
   await pool.query(`ALTER TABLE profiles DROP CONSTRAINT IF EXISTS profiles_theme_check`);
   await pool.query(`ALTER TABLE profiles ADD CONSTRAINT profiles_theme_check CHECK (theme IS NULL OR theme IN ('light', 'dark'))`);
   // Roteiro da sessão de ativação (checklist do que é feito com o cliente).

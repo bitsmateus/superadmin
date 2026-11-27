@@ -8,6 +8,8 @@ import { withTransaction } from '../db.js';
 import { montarPlano, PAGINA_CLOSER, PAGINA_DESTINO, PAGINAS_PROTEGIDAS, type Aba, type Etiqueta, type Lead, type Quadro } from '../lib/consolidacaoCrm.js';
 import { textoDoRelatorio, type ReferenciasDoBanco } from '../lib/consolidacaoCrmTexto.js';
 import { restrictedBoardFilter } from './leadBoards.js';
+import { crmConsolidado } from '../lib/crmConsolidado.js';
+import { juntarRotinas, type BlocoModelo } from '../lib/rotina.js';
 import { agentesPorAba } from './ligacoes3c.js';
 
 const iso = (v: unknown): string => (v instanceof Date ? v.toISOString() : typeof v === 'string' ? v : '');
@@ -68,26 +70,31 @@ async function referencias(db: PoolClient): Promise<Omit<ReferenciasDoBanco, 'pe
   const doArthur = perfis.filter((p) => /^arthur/i.test(p.name)).map((p) => p.id);
   const quantos = async (sql: string, params: unknown[]) => (await linhas<{ n: number }>(sql, params))[0]?.n ?? 0;
   const itens: ReferenciasDoBanco['doArthur'] = [];
-  const item = async (nome: string, sql: string, aoExcluirOUsuario: 'apaga' | 'mantém', params: unknown[] = [doArthur]) =>
-    itens.push({ item: nome, quantos: await quantos(sql, params), aoExcluirOUsuario });
+  const item = async (nome: string, sql: string, params: unknown[] = [doArthur]) =>
+    itens.push({ item: nome, quantos: await quantos(sql, params) });
   const doUsuario = (tabela: string, coluna = 'user_id') => `SELECT count(*)::int AS n FROM ${tabela} WHERE ${coluna} = ANY($1::uuid[])`;
-  await item('lembretes e tarefas dele', doUsuario('reminders'), 'apaga');
-  await item('notificações recebidas', doUsuario('notificacao_destinatarios'), 'apaga');
-  await item('acessos a abas', doUsuario('user_page_access'), 'apaga');
-  await item('aparelhos com notificação', doUsuario('push_subscriptions'), 'apaga');
-  await item('resultados de reunião registrados por ele (o nome fica)', doUsuario('reuniao_resultados'), 'mantém');
-  await item('leads com SDR Arthur', `SELECT count(*)::int AS n FROM lead_rows WHERE sdr ~* '^arthur' AND deleted_at IS NULL`, 'mantém', []);
-  await item('atualizações assinadas por ele', `SELECT count(*)::int AS n FROM lead_notes WHERE author_name ~* '^arthur'`, 'mantém', []);
+  await item('lembretes e tarefas dele', doUsuario('reminders'));
+  await item('notificações recebidas', doUsuario('notificacao_destinatarios'));
+  await item('acessos a abas', doUsuario('user_page_access'));
+  await item('resultados de reunião registrados por ele', doUsuario('reuniao_resultados'));
+  await item('leads com SDR Arthur', `SELECT count(*)::int AS n FROM lead_rows WHERE sdr ~* '^arthur' AND deleted_at IS NULL`, []);
+  await item('atualizações assinadas por ele', `SELECT count(*)::int AS n FROM lead_notes WHERE author_name ~* '^arthur'`, []);
   const rotina = await linhas<{ pagina: string; blocos: number }>(
     'SELECT pagina, count(*)::int AS blocos FROM rotina_blocos WHERE removido_em IS NULL GROUP BY pagina ORDER BY pagina');
+  const blocosDe = (pagina: string) => linhas<BlocoModelo>(
+    'SELECT inicio, fim, titulo, itens, tipo FROM rotina_blocos WHERE pagina = $1 AND removido_em IS NULL ORDER BY inicio, fim', [pagina]);
+  const rotinaJunta = juntarRotinas(await blocosDe(PAGINA_DESTINO), await blocosDe(PAGINA_CLOSER));
   const ambiente = [
     ...[...agentesPorAba()].map(([aba, nome]) => ({ variavel: 'THREEC_AGENTES', valor: `${aba}=${nome}` })),
     ...(process.env.LEAD_WELCOME_SENDER ? [{ variavel: 'LEAD_WELCOME_SENDER', valor: process.env.LEAD_WELCOME_SENDER }] : []),
   ];
-  return { perfis, doArthur: itens, rotina, ambiente };
+  return { perfis, doArthur: itens, rotina, rotinaJunta, ambiente };
 }
 
 export async function consolidacaoCrmRoutes(app: FastifyInstance) {
+  // A tela precisa saber qual aba é a do closer (muda quando a consolidação é executada).
+  app.get('/api/crm/consolidacao', { onRequest: [app.authenticate] }, async () => ({ consolidado: await crmConsolidado() }));
+
   app.get('/api/admin/consolidacao-crm/simulacao', { onRequest: [app.authenticate] }, async (req, reply) => {
     const { role } = req.user as { role?: string };
     if (role !== 'admin') return reply.status(403).send({ message: 'Só administrador.' });
@@ -104,7 +111,7 @@ export async function consolidacaoCrmRoutes(app: FastifyInstance) {
       pessoas.push({ nome: p.name, papel: p.role, veODestino: permitidos === null || permitidos.some((id) => quadrosDoDestino.has(id)) });
     }
     const geradoEm = new Date().toISOString();
-    const referenciasDoBanco: ReferenciasDoBanco = { pessoas, doArthur: refs.doArthur, rotina: refs.rotina, ambiente: refs.ambiente };
+    const referenciasDoBanco: ReferenciasDoBanco = { pessoas, doArthur: refs.doArthur, rotina: refs.rotina, rotinaJunta: refs.rotinaJunta, ambiente: refs.ambiente };
     return { geradoEm, plano, referencias: referenciasDoBanco, texto: textoDoRelatorio(plano, referenciasDoBanco, geradoEm) };
   });
 }

@@ -1,3 +1,4 @@
+import { paginaDoCloser } from './crmConsolidado.js';
 import { pool, query, queryOne, withTransaction } from '../db.js';
 import { sendPushToUsers } from './webPush.js';
 import { abaDeFora } from './abasJuntas.js';
@@ -14,13 +15,12 @@ import { donoDaAba, ehAPessoa, primeiroNome } from './reuniaoResultado.js';
 
 /** Tipos que o n8n pode mandar. */
 export const TIPOS_DA_INTEGRACAO = ['transferencia_ia', 'reuniao_agendada_ia', 'resposta_proposta', 'lead_novo_ia'] as const;
-/** Além desses, o app gera "lead qualificado" (só pro Arthur). */
+/** Além desses, o app gera "lead qualificado" (só pro SDR da aba). */
 export const TIPOS = [...TIPOS_DA_INTEGRACAO, 'lead_qualificado_ia'] as const;
 export type TipoNotificacao = (typeof TIPOS)[number];
 
 /** Quem recebe quando não vem "para": o SDR (dono do CRM ARTHUR) e o closer (dono do CRM LUIS CLOSER). */
 export const PAGINA_DO_SDR = 'crm-arthur';
-export const PAGINA_DO_CLOSER = 'crm-luis-closer';
 const DOS_DOIS: TipoNotificacao[] = ['transferencia_ia', 'reuniao_agendada_ia', 'resposta_proposta'];
 export function quemRecebePorPadrao(tipo: TipoNotificacao): ('sdr' | 'closer')[] {
   return DOS_DOIS.includes(tipo) ? ['sdr', 'closer'] : ['sdr'];
@@ -94,15 +94,20 @@ export const TITULO_PADRAO: Record<TipoNotificacao, string> = {
 
 /** Os nomes de quem recebe ("para" ou a regra padrão) -> ids de perfil (casa pelo primeiro nome, como no resto). */
 async function destinatarios(tipo: TipoNotificacao, para: string[] | null): Promise<string[]> {
+  const closer = await paginaDoCloser();
   const [paginas, sdrs, perfis] = await Promise.all([
-    query<{ id: string; name: string }>('SELECT id, name FROM lead_pages WHERE id = ANY($1)', [[PAGINA_DO_SDR, PAGINA_DO_CLOSER]]),
+    query<{ id: string; name: string }>('SELECT id, name FROM lead_pages WHERE id = ANY($1)', [[PAGINA_DO_SDR, closer]]),
     query<{ name: string }>(`SELECT DISTINCT name FROM lead_labels WHERE field = 'sdr'`),
-    query<{ id: string; name: string | null }>('SELECT id, name FROM profiles'),
+    // Suspenso não recebe aviso.
+    query<{ id: string; name: string | null }>('SELECT id, name FROM profiles WHERE suspended_at IS NULL'),
   ]);
   const nomesSdr = sdrs.map((s) => s.name);
   const dono = (pagina: string, reserva: string) =>
     donoDaAba(paginas.find((p) => p.id === pagina)?.name ?? '', nomesSdr) || reserva;
-  const nomes = para ?? quemRecebePorPadrao(tipo).map((q) => (q === 'sdr' ? dono(PAGINA_DO_SDR, 'Arthur') : dono(PAGINA_DO_CLOSER, 'Luis')));
+  const doPadrao = quemRecebePorPadrao(tipo).map((q) => (q === 'sdr' ? dono(PAGINA_DO_SDR, 'Luis') : dono(closer, 'Luis')));
+  // Pedido pelo nome de quem saiu (o n8n ainda manda "arthur"), ou aba ainda com o nome dele: vai pro Luis.
+  const ativo = (n: string) => perfis.some((p) => ehAPessoa(n, p.name ?? ''));
+  const nomes = (para ?? doPadrao).map((n) => (ativo(n) ? n : 'Luis'));
   return perfis.filter((p) => nomes.some((n) => ehAPessoa(n, p.name ?? ''))).map((p) => p.id);
 }
 

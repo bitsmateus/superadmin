@@ -3,8 +3,10 @@ import type { LeadResumo, Plano } from './consolidacaoCrm.js';
 
 export interface ReferenciasDoBanco {
   pessoas: { nome: string; papel: string; veODestino: boolean | null }[];
-  doArthur: { item: string; quantos: number; aoExcluirOUsuario: 'apaga' | 'mantém' }[];
+  doArthur: { item: string; quantos: number }[];
   rotina: { pagina: string; blocos: number }[];
+  /** Prévia da rotina do CRM unificado (SDR + closer, sem item repetido). */
+  rotinaJunta: { inicio: string; fim: string; titulo: string; itens: string[] }[];
   ambiente: { variavel: string; valor: string }[];
 }
 
@@ -71,8 +73,15 @@ export function textoDoRelatorio(p: Plano, r: ReferenciasDoBanco, geradoEm: stri
 
   titulo('Usuários e registros ligados ao Arthur');
   for (const x of r.pessoas) L.push(`- ${x.nome} (${x.papel})${x.veODestino === null ? '' : ` — ${x.veODestino ? 'vê o destino' : 'NÃO vê o destino'}`}`);
-  for (const x of r.doArthur) L.push(`- ${x.item}: ${x.quantos} — excluir o usuário ${x.aoExcluirOUsuario === 'apaga' ? 'APAGARIA' : 'mantém'}`);
+  for (const x of r.doArthur) L.push(`- ${x.item}: ${x.quantos}`);
+  L.push('Suspender ou remover o usuário na Equipe não apaga nada disso.');
   for (const x of r.rotina) L.push(`- rotina da aba ${x.pagina}: ${x.blocos} bloco(s)`);
   for (const x of r.ambiente) L.push(`- variável do servidor ${x.variavel} = ${x.valor}`);
+
+  titulo('Rotina junta (SDR + closer, sem item repetido) — prévia');
+  for (const b of r.rotinaJunta) {
+    L.push(`- ${b.inicio}–${b.fim} ${b.titulo}`);
+    for (const i of b.itens) L.push(`    · ${i}`);
+  }
   return L.join('\n');
 }

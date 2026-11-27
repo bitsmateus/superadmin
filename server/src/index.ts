@@ -153,10 +153,14 @@ async function main() {
     }
     const { sub, iat } = req.user as { sub: string; iat?: number };
     if (sub && iat) {
-      const profile = await queryOne<{ session_invalidated_at: string | null }>(
-        'SELECT session_invalidated_at FROM profiles WHERE id = $1',
+      const profile = await queryOne<{ session_invalidated_at: string | null; suspended_at: string | null }>(
+        'SELECT session_invalidated_at, suspended_at FROM profiles WHERE id = $1',
         [sub]
       );
+      if (profile?.suspended_at) {
+        reply.status(401).send({ message: 'Usuário suspenso' });
+        return;
+      }
       if (profile?.session_invalidated_at && new Date(profile.session_invalidated_at).getTime() > iat * 1000) {
         reply.status(401).send({ message: 'Sessão encerrada por um administrador' });
         return;

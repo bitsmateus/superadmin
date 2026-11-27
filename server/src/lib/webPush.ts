@@ -31,7 +31,8 @@ export async function sendPushToUsers(
   }
 
   const subs = await query<{ id: string; endpoint: string; p256dh: string; auth: string }>(
-    'SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = ANY($1)',
+    `SELECT s.id, s.endpoint, s.p256dh, s.auth FROM push_subscriptions s JOIN profiles p ON p.id = s.user_id
+     WHERE s.user_id = ANY($1) AND p.suspended_at IS NULL`,
     [userIds]
   );
   if (!subs.length) return;

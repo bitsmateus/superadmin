@@ -51,6 +51,7 @@ import { DashboardDoSuporte } from '@/components/comercial/DashboardDoSuporte'
 import { CloserMetricsGrid } from '@/components/comercial/CloserMetricsGrid'
 import { isLeadTubarao, PAGINA_TUBARAO } from '@/lib/leadTubarao'
 import { limiteDeDiasDoTipo } from '@/lib/diasDeContato'
+import { useCrmConsolidado, PAGINA_UNIFICADA } from '@/hooks/useCrmConsolidado'
 import { formatarResposta, ordemDaPrioridade, passaNaPrioridade, prioridadeExibida, textoSeguroNoCsv, OPCOES_DE_PRIORIDADE, SEM_PRIORIDADE } from '@/lib/respostaMeta'
 import { LeadTrashModal } from '@/components/comercial/LeadTrashModal'
 import { LeadTodayPanel } from '@/components/comercial/LeadTodayPanel'
@@ -1024,6 +1025,7 @@ function BoardGroup({
     setSortBy((prev) => (prev.key === key ? { key, desc: !prev.desc } : { key, desc: false }))
   }
   // No CRM do Luis Closer a coluna que se chama SDR nos outros CRMs aparece como Closer.
+  const consolidado = useCrmConsolidado()
   const cols = columnsForSdrLock(sdrLock, board.isVendas, hideIanMateusCols, board.name, crmArthurLuis, crmDoSuporte, board.page === 'novos_leads').map((c) =>
     board.page === 'crm-luis-closer' && c.key === 'sdr' ? { ...c, label: 'Closer' }
       : hideIanMateusCols && c.key === 'retornar' ? { ...c, label: 'Finalizar' }
@@ -1379,7 +1381,7 @@ function BoardGroup({
                               // Lead de Tubarão (isLeadTubarao) só vai pro CRM TUBARAO, com o SDR marcado (pedido de 13/11).
                               // No próprio CRM TUBARAO o SDR (Arthur, IA Luiza, Luis…) só fica marcado: o card não sai de lá.
                               const paraTubarao = board.page === 'novos_leads' && isLeadTubarao(row) && quadrosTubarao.length > 0
-                              const target = next && board.page !== PAGINA_TUBARAO
+                              const target = next && board.page !== PAGINA_TUBARAO && !(consolidado && board.page === PAGINA_UNIFICADA)
                                 ? paraTubarao
                                   ? quadrosTubarao.find((b) => b.name.trim().toLowerCase() === board.name.trim().toLowerCase()) ?? quadrosTubarao[0]
                                   : sdrPageBoards.get(next)?.find(
@@ -1556,7 +1558,12 @@ export function LeadBoardsView({ page, tituloDaTela, aoLadoDoTitulo }: LeadBoard
   const subtitle = currentPage?.noPipeline ? 'Suporte · CRM do time'
     : isDemandas ? 'Demandas · quadros do cliente' : 'Comercial · quadros de captação de leads'
   const sdrLabelsForLock = useLeadLabels('sdr')
-  const sdrLock = React.useMemo(() => sdrLockForPageName(title, sdrLabelsForLock), [title, sdrLabelsForLock])
+  // Aba unificada (depois da consolidação): tem leads de mais de um SDR, então não trava (a coluna SDR aparece, com o
+  // nome de quem fez, e o dashboard conta todos). Lead novo nasce com o SDR Luis.
+  const consolidado = useCrmConsolidado()
+  const unificado = consolidado && page === PAGINA_UNIFICADA
+  const sdrLock = React.useMemo(() => (unificado ? undefined : sdrLockForPageName(title, sdrLabelsForLock)), [unificado, title, sdrLabelsForLock])
+  const sdrDoLeadNovo = unificado ? 'Luis' : sdrLock
   const hideIanMateusCols = React.useMemo(() => isIanMateusPage(title) || isIanMateusPage(page), [title, page])
   // CRM do Jean/João (dentro do Pipeline): colunas próprias, só em lista, sem filtro de SDR.
   const crmDoSuporte = currentPage?.noPipeline === true
@@ -1583,9 +1590,11 @@ export function LeadBoardsView({ page, tituloDaTela, aoLadoDoTitulo }: LeadBoard
     for (const l of sdrLabelsForLock) {
       const targetPage = allPages.find((p) => sdrLockForPageName(p.name, sdrLabelsForLock) === l.name)
       if (targetPage) map.set(l.name, allBoards.filter((b) => b.page === targetPage.id))
+      // Consolidado: marcar "Luis" leva pro CRM unificado (e não pro CRM antigo com o nome dele).
+      if (consolidado && /^lu[ií]s/i.test(l.name)) map.set(l.name, allBoards.filter((b) => b.page === PAGINA_UNIFICADA))
     }
     return map
-  }, [sdrLabelsForLock, allPages, allBoards])
+  }, [sdrLabelsForLock, allPages, allBoards, consolidado])
   const quadrosTubarao = React.useMemo(
     () => allBoards.filter((b) => b.page === PAGINA_TUBARAO && !b.isVendas && !b.isContrato).sort((a, b) => a.position - b.position),
     [allBoards],
@@ -1734,7 +1743,7 @@ export function LeadBoardsView({ page, tituloDaTela, aoLadoDoTitulo }: LeadBoard
     // Aba travada num SDR (CRM Luis/Arthur) — lead criado aqui já nasce com o SDR certo, já que a
     // coluna nem aparece pra escolher manualmente. Sem isso, o lead ficava "Sem SDR" nos
     // dashboards (o funil por SDR conta pelo campo, não por em qual aba o lead está).
-    const row = leadBoardsService.createRow(boardId, sdrLock ? { sdr: sdrLock } : undefined)
+    const row = leadBoardsService.createRow(boardId, sdrDoLeadNovo ? { sdr: sdrDoLeadNovo } : undefined)
     setFocusRowId(row.id)
   }
 
@@ -1948,15 +1957,21 @@ export function LeadBoardsView({ page, tituloDaTela, aoLadoDoTitulo }: LeadBoard
                 action={isAdmin ? <Button size="sm" onClick={() => setBoardModalOpen(true)}>Criar quadro</Button> : undefined}
               />
             ) : verLigacoes && temLigacoes ? (
-              <LigacoesPainel pagina={page} pessoa={sdrLock ?? undefined} />
+              <LigacoesPainel pagina={page} pessoa={sdrDoLeadNovo ?? undefined} />
             ) : view === 'dashboard' && page === 'crm-luis-closer' ? (
               <CloserMetricsGrid rows={visibleRows} boards={boards} onOpenLead={setOpenLeadId} />
+            ) : view === 'dashboard' && unificado ? (
+              // O CRM unificado é o do SDR e o do closer: as métricas dos dois.
+              <div className="space-y-6">
+                <CloserMetricsGrid rows={visibleRows} boards={boards} onOpenLead={setOpenLeadId} />
+                <LeadDashboardView rows={dashboardRows} boards={boards} onOpenLead={setOpenLeadId} />
+              </div>
             ) : view === 'dashboard' && crmDoSuporte ? (
               <DashboardDoSuporte rows={visibleRows} boards={boards} onOpenLead={setOpenLeadId} />
             ) : view === 'dashboard' ? (
               <LeadDashboardView rows={dashboardRows} boards={boards} onOpenLead={setOpenLeadId} sdrTabLabel={sdrLock ? 'Minhas métricas' : undefined} onlySdr={!!sdrLock} />
             ) : view === 'kanban' ? (
-              <LeadKanbanBoard rows={visibleRows} allBoards={boards} onOpenLead={setOpenLeadId} sdrLock={sdrLock ?? undefined} modoDemanda={hideIanMateusCols} />
+              <LeadKanbanBoard rows={visibleRows} allBoards={boards} onOpenLead={setOpenLeadId} sdrLock={sdrDoLeadNovo ?? undefined} modoDemanda={hideIanMateusCols} />
             ) : (
               <>
                 {!kanbanIan && <LeadTodayPanel rows={pageRows} boards={boards} onOpenLead={setOpenLeadId} closer={page === 'crm-luis-closer'} suporte={crmDoSuporte} />}

@@ -400,8 +400,8 @@ function AgendamentosPorCanal({
         <p className="mb-2 mt-5 border-t border-line pt-3 text-xs font-semibold uppercase tracking-wide text-foreground/50">Por quem agendou</p>
         <ul className="space-y-1.5">
           {Array.from(porQuem.entries())
-            // Os dois SDRs e a IA Luiza sempre aparecem; "Outros" e "Não informado" só quando tiver alguém.
-            .filter(([p, l]) => p === 'SDR Arthur' || p === 'SDR Luis' || p === 'IA Luiza' || l.length > 0)
+            // O Luis e a IA Luiza sempre aparecem; os demais (inclusive o Arthur, que saiu) só quando tiver reunião no período.
+            .filter(([p, l]) => p === 'SDR Luis' || p === 'IA Luiza' || l.length > 0)
             .map(([pessoa, lista]) => {
               const n = lista.length
               const pct = total > 0 ? Math.round((n / total) * 100) : 0

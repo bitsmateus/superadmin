@@ -43,9 +43,9 @@ export async function authRoutes(app: FastifyInstance) {
     { schema: { body: { type: 'object', required: ['email', 'password'], properties: { email: { type: 'string' }, password: { type: 'string' } } } } },
     async (req, reply) => {
       const { email, password } = req.body;
-      const profile = await queryOne<Profile & { password_hash: string }>(
+      const profile = await queryOne<Profile & { password_hash: string; suspended_at: string | null }>(
         `SELECT id, email, name, role, area, restrict_access AS "restrictAccess", theme,
-                sidebar_order AS "sidebarOrder", pinned_menu AS "pinnedMenu", created_at, password_hash
+                sidebar_order AS "sidebarOrder", pinned_menu AS "pinnedMenu", created_at, password_hash, suspended_at
          FROM profiles WHERE lower(email) = lower($1)`,
         [email.trim()]
       );
@@ -53,13 +53,14 @@ export async function authRoutes(app: FastifyInstance) {
 
       const valid = await bcrypt.compare(password, profile.password_hash);
       if (!valid) return reply.status(401).send({ message: 'Credenciais inválidas' });
+      if (profile.suspended_at) return reply.status(403).send({ message: 'Usuário suspenso. Fale com um administrador.' });
 
       const token = app.jwt.sign(
         { sub: profile.id, email: profile.email, role: profile.role },
         { expiresIn: '7d' }
       );
 
-      const { password_hash: _, ...user } = profile;
+      const { password_hash: _, suspended_at: __, ...user } = profile;
       return { token, user: await attachMenuAccess(user) };
     }
   );
@@ -81,7 +82,8 @@ export async function authRoutes(app: FastifyInstance) {
     const { role } = req.user as { role: string };
     if (role !== 'admin') return reply.status(403).send({ message: 'Acesso negado' });
     return query<Profile>(
-      'SELECT id, email, name, role, area, restrict_access AS "restrictAccess", created_at FROM profiles ORDER BY created_at'
+      `SELECT id, email, name, role, area, restrict_access AS "restrictAccess", created_at,
+              suspended_at AS "suspendedAt", removed_at AS "removedAt" FROM profiles ORDER BY created_at`
     );
   });
 
@@ -220,14 +222,43 @@ export async function authRoutes(app: FastifyInstance) {
     }
   );
 
-  // DELETE /api/users/:id — admin only
+  // POST /api/users/:id/suspender { suspenso } — admin only. Suspenso não entra e é deslogado na hora; lembretes, tarefas
+  // e histórico ficam como estão. Reativar (suspenso=false) também desfaz o "remover".
+  app.post<{ Params: { id: string }; Body: { suspenso?: boolean } }>(
+    '/api/users/:id/suspender',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const { sub, role } = req.user as { sub: string; role: string };
+      if (role !== 'admin') return reply.status(403).send({ message: 'Acesso negado' });
+      const suspenso = req.body?.suspenso !== false;
+      if (suspenso && req.params.id === sub) return reply.status(400).send({ message: 'Você não pode suspender a si mesmo.' });
+      const [updated] = await query<{ id: string }>(
+        suspenso
+          ? 'UPDATE profiles SET suspended_at = COALESCE(suspended_at, NOW()), session_invalidated_at = NOW() WHERE id = $1 RETURNING id'
+          : 'UPDATE profiles SET suspended_at = NULL, removed_at = NULL WHERE id = $1 RETURNING id',
+        [req.params.id]
+      );
+      if (!updated) return reply.status(404).send({ message: 'Usuário não encontrado' });
+      if (suspenso) broadcastToUser(req.params.id, 'auth', 'force_logout', { user_id: req.params.id });
+      return reply.status(204).send();
+    }
+  );
+
+  // DELETE /api/users/:id — admin only. NÃO apaga a linha (apagaria lembretes, tarefas e avisos dele em cascata): some
+  // da Equipe e fica sem acesso.
   app.delete<{ Params: { id: string } }>(
     '/api/users/:id',
     { onRequest: [app.authenticate] },
     async (req, reply) => {
       const { role } = req.user as { role: string };
       if (role !== 'admin') return reply.status(403).send({ message: 'Acesso negado' });
-      await query('DELETE FROM profiles WHERE id = $1', [req.params.id]);
+      const { sub } = req.user as { sub: string };
+      if (req.params.id === sub) return reply.status(400).send({ message: 'Você não pode remover a si mesmo.' });
+      await query(
+        'UPDATE profiles SET removed_at = NOW(), suspended_at = COALESCE(suspended_at, NOW()), session_invalidated_at = NOW() WHERE id = $1',
+        [req.params.id]
+      );
+      broadcastToUser(req.params.id, 'auth', 'force_logout', { user_id: req.params.id });
       return reply.status(204).send();
     }
   );

@@ -70,7 +70,7 @@ export const ROTINAS_INICIAIS: Record<string, BlocoModelo[]> = {
     reuniao('10:00', '10:45', 'Sem reunião: retorna as propostas do horário, se tiver.',
       'Continua o social selling outbound: seguir, comentar e mandar direct (seguir o roteiro).'),
     crmDaReuniao('10:45', '11:00'),
-    reuniao('11:00', '11:45', 'Sem reunião: retorna as propostas do horário, se tiver.', 'Inicia ligação para o D1 ao D7 do CRM Arthur.'),
+    reuniao('11:00', '11:45', 'Sem reunião: retorna as propostas do horário, se tiver.', 'Inicia ligação para o D1 ao D7 do CRM.'),
     { inicio: '11:45', fim: '12:00', titulo: 'Organizar e confirmar a tarde', tipo: 'tarefa', itens: [
       'Organizar o CRM.',
       'Confirmar as reuniões da parte da tarde.',
@@ -91,6 +91,24 @@ export const ROTINAS_INICIAIS: Record<string, BlocoModelo[]> = {
     ] },
   ],
 };
+
+/**
+ * A rotina de quem passou a ser SDR e closer: a do closer inteira, mais o que só a do SDR tem — sem item repetido entre
+ * as duas. Bloco com o mesmo horário e título vira um só; bloco do SDR que ficou sem nada novo sai.
+ */
+export function juntarRotinas<T extends BlocoModelo>(doSdr: T[], doCloser: T[]): T[] {
+  const chave = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const junta = doCloser.map((b) => ({ ...b, itens: [...b.itens] }));
+  const jaTem = new Set(junta.flatMap((b) => b.itens.map(chave)));
+  for (const bloco of doSdr) {
+    const novos = bloco.itens.filter((i) => !jaTem.has(chave(i)));
+    novos.forEach((i) => jaTem.add(chave(i)));
+    const igual = junta.find((b) => b.inicio === bloco.inicio && b.fim === bloco.fim && chave(b.titulo) === chave(bloco.titulo));
+    if (igual) igual.itens.push(...novos);
+    else if (novos.length || !bloco.itens.length) junta.push({ ...bloco, itens: novos });
+  }
+  return junta.sort((a, b) => a.inicio.localeCompare(b.inicio) || a.fim.localeCompare(b.fim));
+}
 
 /** Agora em Brasília: { data: "YYYY-MM-DD", hora: "HH:MM" }. */
 export function agoraLocal(d: Date = new Date()): { data: string; hora: string } {

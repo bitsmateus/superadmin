@@ -2450,6 +2450,18 @@ END; $$`);
     }
   }
 
+  // Suspensão de usuário: suspenso não entra nem recebe aviso, e nada do que referencia ele é apagado. "Remover" na
+  // Equipe também só marca (removed_at): a linha fica, com lembretes e tarefas.
+  await pool.query(`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS suspended_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS removed_at TIMESTAMPTZ`);
+  // Consolidação dos CRMs: a execução grava a linha; a partir daí o closer passa a ser o CRM unificado
+  // (ver lib/crmConsolidado.ts). Vazia = tudo como antes.
+  await pool.query(`CREATE TABLE IF NOT EXISTS crm_consolidacao (
+    id BOOLEAN PRIMARY KEY DEFAULT true CHECK (id),
+    executada_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    por TEXT NOT NULL DEFAULT ''
+  )`);
+
   // Rotina do dia (checklist do botão "Rotina" no CRM do SDR e do closer, ver routes/rotina.ts e lib/rotina.ts). A
   // rotina é da aba (crm-arthur, crm-luis-closer): quem marca é o dono da aba, pelo nome (a mesma regra do sininho).
   // Bloco removido fica com removido_em, pra não perder as marcações antigas. Uma marcação por bloco por dia; só

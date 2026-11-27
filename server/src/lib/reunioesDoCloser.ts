@@ -1,4 +1,5 @@
 import { query } from '../db.js';
+import { paginaDoCloser } from './crmConsolidado.js';
 
 /**
  * As reuniões do CRM do Luis (closer), que é onde a reunião acontece e onde ele marca o resultado (pedido de 12/11).
@@ -11,7 +12,6 @@ import { query } from '../db.js';
  * Os nomes das etapas variam de CRM pra CRM ("Follow up Propostas", "Followup Propostas"…): compara sem acento,
  * maiúscula nem espaço/hífen.
  */
-export const PAGINA_DO_CLOSER = 'crm-luis-closer';
 
 export interface ItemDoCloser { id: string; abrir_id: string; nome: string; status: string }
 export interface ReunioesDoCloser { realizadas: ItemDoCloser[]; no_show: ItemDoCloser[]; vendas: ItemDoCloser[] }
@@ -45,7 +45,7 @@ export async function reunioesDoCloser(from: string, to: string): Promise<Reunio
      FROM lead_rows lr
      JOIN lead_boards lb ON lb.id = lr.board_id
      WHERE lb.page = $1 AND lb.is_vendas = false AND lr.deleted_at IS NULL`,
-    [PAGINA_DO_CLOSER]
+    [await paginaDoCloser()]
   );
   const noPeriodo = (iso: string | null) => { const d = diaEmBrasilia(iso); return !!d && d >= from && d <= to; };
   // abrir_id: o próprio card do closer (é o que ele abre).

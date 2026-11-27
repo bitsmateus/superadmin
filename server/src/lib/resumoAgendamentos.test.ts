@@ -44,10 +44,10 @@ test('montarResumoAgendamentos: dia sem agendamento', () => {
   assert.match(montarResumoAgendamentos('2026-10-25', []), /Total de A\.G:\* 0\nNenhum agendamento hoje\./);
 });
 
-test('bloco de ligações: total e uma linha por pessoa', async () => {
+test('bloco de ligações: total e a linha do Luís (sem o Arthur)', async () => {
   const { blocoLigacoes } = await import('./resumoAgendamentos.js');
-  const txt = blocoLigacoes({ arthur: 150, luis: 40 }).join('\n');
-  assert.match(txt, /Total de ligações: 190/);
-  assert.match(txt, /• Arthur: 150\n• Luís: 40/);
+  const txt = blocoLigacoes({ luis: 40 }).join('\n');
+  assert.match(txt, /Total de ligações: 40\n• Luís: 40/);
+  assert.doesNotMatch(txt, /Arthur/);
   assert.doesNotMatch(txt, /🚨/);
 });

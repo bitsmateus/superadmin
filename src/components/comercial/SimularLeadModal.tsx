@@ -16,7 +16,7 @@ interface TemplateOpcao { name: string; language: string; bodyText: string; vari
 const PADRAO = 'primeiro_dia'
 const OUTRO = '__outro__'
 /** Assinatura padrão da boas-vindas ({{2}} do primeiro_dia). */
-const ASSINATURA = 'Arthur'
+const ASSINATURA = 'Luis'
 
 const primeiroNome = (nome: string) => {
   const p = nome.trim().split(/\s+/)[0] ?? ''

@@ -1,3 +1,4 @@
+import { pessoaSuspensa } from './crmConsolidado.js';
 import { query } from '../db.js';
 
 /**
@@ -123,7 +124,7 @@ async function sincronizar(): Promise<void> {
   for (const c of candidatos) {
     if (jaTem.has(c.id) || !entregue(c)) continue;
     const pessoa = pessoaDaAba(c.page_name);
-    if (!pessoa) continue;
+    if (!pessoa || await pessoaSuspensa(pessoa)) continue;
     const l = lancamentoDaEntrega(c.tipo ?? '', tipos);
     // Entrega feita = comissão devida: nasce como "Assinado" (é o que entra no pagamento na aba Comissões).
     await query(

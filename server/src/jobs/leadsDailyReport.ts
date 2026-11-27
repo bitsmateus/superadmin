@@ -1,10 +1,11 @@
+import { paginaDoCloser } from '../lib/crmConsolidado.js';
 import { query, queryOne } from '../db.js';
 import { POS_REUNIAO_STATUSES, REUNIAO_STATUSES } from '../routes/leadBoards.js';
 import {
   blocoLigacoes, blocoReunioes, blocoRetornos, montarResumoAgendamentos,
   type AgendamentoDoDia, type LigacoesDoDia, type RetornosDoDia,
 } from '../lib/resumoAgendamentos.js';
-import { PAGINA_DO_CLOSER, ROTULO_ADIADO, ROTULO_RETORNOU, ROTULO_SEM_RESPOSTA } from '../lib/retornoProposta.js';
+import { ROTULO_ADIADO, ROTULO_RETORNOU, ROTULO_SEM_RESPOSTA } from '../lib/retornoProposta.js';
 import { sendToGroupWith } from '../lib/supportGroup.js';
 import { config3C, listarLigacoes, normalizarLigacao, type Ligacao } from '../lib/tresC.js';
 import { agentesPorAba, ehDaPessoa } from '../routes/ligacoes3c.js';
@@ -86,7 +87,7 @@ export async function retornosDoDia(dia: string): Promise<RetornosDoDia> {
        AND r.retornar ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}'
        AND left(r.retornar, 10) = $2
      ORDER BY r.retornar`,
-    [PAGINA_DO_CLOSER, dia]
+    [await paginaDoCloser(), dia]
   );
   return { retornou, semResposta, adiado, faltou: faltou.map((f) => f.nome) };
 }
@@ -126,9 +127,8 @@ export async function reunioesDoDia(dia: string): Promise<{ compareceu: string[]
 }
 
 /**
- * Ligações do dia da 3C Plus, do Arthur e do Luís (as mesmas do botão "Ligações" nos CRMs deles: o dono da aba
- * é quem o nome da aba cita, e THREEC_AGENTES troca o nome do agente na 3C). null = 3C não configurada ou fora
- * do ar — o resumo sai sem o bloco em vez de não sair.
+ * Ligações do dia da 3C Plus, do Luís (as mesmas do botão "Ligações" no CRM do closer: THREEC_AGENTES troca o nome do
+ * agente na 3C). null = 3C não configurada ou fora do ar — o resumo sai sem o bloco em vez de não sair.
  */
 export async function ligacoesDoDia(dia: string): Promise<LigacoesDoDia | null> {
   const cfg = config3C();
@@ -136,17 +136,8 @@ export async function ligacoesDoDia(dia: string): Promise<LigacoesDoDia | null> 
   try {
     const { itens } = await listarLigacoes(cfg, dia, dia);
     const lista = itens.map(normalizarLigacao).filter((l): l is Ligacao => !!l);
-    const abas = await query<{ id: string; name: string }>('SELECT id, name FROM lead_pages WHERE archived_at IS NULL');
-    const agenteDe = (re: RegExp, padrao: string) => {
-      const aba = abas.find((a) => re.test(a.name));
-      return (aba && agentesPorAba().get(aba.id)) || padrao;
-    };
-    const arthur = agenteDe(/arthur/i, 'Arthur');
-    const luis = agenteDe(/lu[ií]s/i, 'Luis');
-    return {
-      arthur: lista.filter((l) => ehDaPessoa(l.agente, arthur)).length,
-      luis: lista.filter((l) => ehDaPessoa(l.agente, luis)).length,
-    };
+    const luis = agentesPorAba().get(await paginaDoCloser()) || agentesPorAba().get('crm-luis-closer') || 'Luis';
+    return { luis: lista.filter((l) => ehDaPessoa(l.agente, luis)).length };
   } catch (err) {
     console.error('[leads-report] ligações da 3C indisponíveis:', err instanceof Error ? err.message : err);
     return null;

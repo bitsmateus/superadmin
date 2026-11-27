@@ -6,9 +6,10 @@ import {
 import { textoParaHtml } from '../lib/integracaoCards.js';
 import { agendamentoParaDate, dateParaAgendamento, donoDaAba, ehAPessoa } from '../lib/reuniaoResultado.js';
 import {
-  MAXIMO_EM_REUNIAO, PAGINA_DO_CLOSER, SONECA_EM_REUNIAO_MS, contarHistorico, ehQuadroDeProposta, estadoEmReuniao,
+  MAXIMO_EM_REUNIAO, SONECA_EM_REUNIAO_MS, contarHistorico, ehQuadroDeProposta, estadoEmReuniao,
   rotuloDoEventoDeRetorno, rotuloDoEventoEmReuniao, textoDaNotaDeRetorno, validarRetorno,
 } from '../lib/retornoProposta.js';
+import { paginaDoCloser } from '../lib/crmConsolidado.js';
 
 /**
  * Popup obrigatório do retorno da proposta (CRM LUIS CLOSER). Card em "Proposta enviada"/"Follow-up Propostas" com o
@@ -42,7 +43,7 @@ async function pendenciasDe(userId: string, role: string) {
      LEFT JOIN lead_pages olp ON olp.id = olb.page
      WHERE lb.page = $1 AND r.deleted_at IS NULL AND lp.archived_at IS NULL AND NOT COALESCE(r.retornado, false)
        AND r.retornar ~ '^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}' AND r.retornar >= $2 AND r.retornar <= $3`,
-    [PAGINA_DO_CLOSER, DESDE, dateParaAgendamento(agora)]
+    [await paginaDoCloser(), DESDE, dateParaAgendamento(agora)]
   );
   const vencidos = rows.filter((r) => ehQuadroDeProposta(r.coluna) && agendamentoParaDate(r.retornar));
   if (!vencidos.length) return [];
@@ -131,9 +132,9 @@ export async function retornosRoutes(app: FastifyInstance) {
       // O que muda no card.
       const patch: Record<string, unknown> = {};
       const irPara = async (etapa: string) => {
-        const quadro = await quadroDoStatus(PAGINA_DO_CLOSER, etapa);
+        const quadro = await quadroDoStatus(await paginaDoCloser(), etapa);
         if (quadro) patch.board_id = quadro;
-        else patch.status = (await etiquetaDeStatus(PAGINA_DO_CLOSER, etapa)) ?? etapa;
+        else patch.status = (await etiquetaDeStatus(await paginaDoCloser(), etapa)) ?? etapa;
       };
       if (r.retornarNovo) { patch.retornar = r.retornarNovo; patch.retornado = false; }
       if (r.desfecho === 'fechou') {

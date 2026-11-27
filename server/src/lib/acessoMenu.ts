@@ -2,6 +2,7 @@ import { query, queryOne } from '../db.js';
 import { restrictedBoardFilter } from '../routes/leadBoards.js';
 
 import { podeVerFinanceiro } from './financeiro.js';
+import { paginaDoCloser } from './crmConsolidado.js';
 
 /** Financeiro (Vendas, Contrato, comissões, Asaas): SÓ Ian e Mateus (ver financeiro.ts). */
 export function ehDoFinanceiro(userId: string | undefined, role: string | undefined): boolean {
@@ -28,7 +29,7 @@ export async function podeVerMetricasDoCloser(userId: string, role: string | und
   const permitidos = await restrictedBoardFilter(userId, role ?? '');
   if (permitidos === null) return true;
   if (permitidos.length) {
-    const achou = await query(`SELECT 1 FROM lead_boards WHERE id = ANY($1) AND page = 'crm-luis-closer' LIMIT 1`, [permitidos]);
+    const achou = await query('SELECT 1 FROM lead_boards WHERE id = ANY($1) AND page = $2 LIMIT 1', [permitidos, await paginaDoCloser()]);
     if (achou.length) return true;
   }
   return temMarcaDeMenu(userId, role, 'comercial_dashboard');

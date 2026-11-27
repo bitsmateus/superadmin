@@ -9,6 +9,9 @@ export type UserRole = 'admin' | 'supervisor' | 'suporte'
 export type TeamArea = 'comercial' | 'entrega' | 'ambos'
 
 export interface Profile {
+  /** Preenchidos só na lista da Equipe (GET /api/users). */
+  suspendedAt?: string | null
+  removedAt?: string | null
   id: string
   email: string
   name: string | null

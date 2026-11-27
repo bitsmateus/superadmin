@@ -5,6 +5,8 @@ import {
 } from './leadBoards.js';
 import { textoParaHtml } from '../lib/integracaoCards.js';
 import { abaDeFora } from '../lib/abasJuntas.js';
+import { crmConsolidado } from '../lib/crmConsolidado.js';
+import { PAGINA_UNIFICADA } from '../lib/regrasDaConsolidacao.js';
 import { enviarWebhookDaReuniao } from '../jobs/reuniaoWebhook.js';
 import {
   agendamentoLegivel, agendamentoParaDate, dateParaAgendamento, cardDaPessoa, reunioesPendentes, responsaveisDaReuniao,
@@ -68,8 +70,10 @@ async function pendenciasDe(userId: string, role: string) {
   );
   if (!rows.length) return [];
 
+  // Depois da consolidação, todo card do CRM unificado é "do closer": quem responde é o dono dele.
+  const consolidado = await crmConsolidado();
   const candidatos: Candidato[] = rows.map((r) => ({
-    ...r, ehCopiaCloser: r.eh_copia_closer, nomeDaPagina: r.nome_da_pagina,
+    ...r, ehCopiaCloser: r.eh_copia_closer || (consolidado && r.pagina === PAGINA_UNIFICADA), nomeDaPagina: r.nome_da_pagina,
   }));
   const familias = [...new Set(candidatos.map((c) => c.familia))];
   const [respondidas, sdrs, profile, originais, paginas] = await Promise.all([

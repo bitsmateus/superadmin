@@ -1,3 +1,5 @@
+import { crmConsolidado } from '../lib/crmConsolidado.js';
+import { PAGINA_CLOSER_ANTIGA, PAGINA_UNIFICADA } from '../lib/regrasDaConsolidacao.js';
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { query, queryOne } from '../db.js';
 import { restrictedBoardFilter } from './leadBoards.js';
@@ -14,7 +16,7 @@ import {
  * Cada aba mostra só as ligações do dono dela: o SDR cujo nome está no nome da aba ("CRM ARTHUR" -> Arthur),
  * a mesma regra do sdrDaAba/donoDaAba. Na 3C, a ligação é do dono quando o primeiro nome do agente bate
  * ("Arthur Rosa" -> arthur). Se o nome do agente na 3C for diferente, THREEC_AGENTES liga os dois
- * ("crm-arthur=Arthur Rosa;crm-luis-closer=Luis Otavio").
+ * ("crm-luis-closer=Luis Otavio").
  *
  * Quem vê: quem já enxerga aquela aba no CRM (o próprio dono, Ian/Mateus e quem tiver a aba liberada).
  */
@@ -54,12 +56,13 @@ const NAO_CONFIGURADO = {
   configurado: false,
 };
 
-/** "crm-arthur=Arthur Rosa;crm-luis-closer=Luis" -> mapa aba -> nome do agente na 3C. */
+/** "crm-luis-closer=Luis" -> mapa aba -> nome do agente na 3C. */
 export function agentesPorAba(): Map<string, string> {
   const m = new Map<string, string>();
   for (const par of (process.env.THREEC_AGENTES ?? '').split(/[;\n]/)) {
     const [aba, nome] = par.split('=').map((s) => s?.trim());
-    if (aba && nome) m.set(aba, nome);
+    // O Arthur saiu: apontamento pro nome dele na configuração deixa de valer.
+    if (aba && nome && !/^arthur\b/i.test(nome)) m.set(aba, nome);
   }
   return m;
 }
@@ -91,7 +94,9 @@ async function donoDaPagina(req: FastifyRequest, reply: FastifyReply, pagina: st
   }
   const sdrs = await query<{ name: string }>(`SELECT DISTINCT name FROM lead_labels WHERE field = 'sdr'`);
   const dono = donoDaAba(aba.name, sdrs.map((s) => s.name));
-  const agente = agentesPorAba().get(pagina) ?? dono;
+  // CRM unificado: sem apontamento próprio, vale o que estava no do closer.
+  const doCloserAntigo = pagina === PAGINA_UNIFICADA && await crmConsolidado() ? agentesPorAba().get(PAGINA_CLOSER_ANTIGA) : undefined;
+  const agente = agentesPorAba().get(pagina) ?? doCloserAntigo ?? dono;
   if (!agente) {
     reply.status(400).send({ message: 'Essa aba não é de nenhuma pessoa do time, então não tem ligações pra mostrar.' });
     return null;

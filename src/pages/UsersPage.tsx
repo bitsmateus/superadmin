@@ -126,7 +126,8 @@ export function UsersPage() {
     setLoading(true)
     try {
       const data = await api.get<Profile[]>('/api/users')
-      setProfiles(data ?? [])
+      // "Removido" some da lista (a linha fica guardada no banco, com tudo o que aponta pra ela).
+      setProfiles((data ?? []).filter((p) => !p.removedAt))
     } catch (err) {
       toast.error('Falha ao carregar equipe: ' + (err instanceof Error ? err.message : 'Erro'))
     } finally {
@@ -272,6 +273,25 @@ function ProfileRow({
   const [editOpen, setEditOpen] = React.useState(false)
   const [loggingOut, setLoggingOut] = React.useState(false)
 
+  const suspenso = !!profile.suspendedAt
+  const [suspendendo, setSuspendendo] = React.useState(false)
+  const alternarSuspensao = async () => {
+    const nome = profile.name || profile.email
+    if (!window.confirm(suspenso
+      ? `Reativar o acesso de "${nome}"?`
+      : `Suspender "${nome}"? A pessoa é deslogada e não entra mais. Histórico, lembretes e tarefas ficam como estão.`)) return
+    setSuspendendo(true)
+    try {
+      await api.post(`/api/users/${profile.id}/suspender`, { suspenso: !suspenso })
+      toast.success(suspenso ? 'Acesso reativado' : 'Usuário suspenso')
+      onSaved()
+    } catch (err) {
+      toast.error('Falha: ' + (err instanceof Error ? err.message : 'Erro'))
+    } finally {
+      setSuspendendo(false)
+    }
+  }
+
   const forceLogout = async () => {
     if (!window.confirm(`Deslogar "${profile.name || profile.email}" agora? A sessão dela é encerrada imediatamente.`)) return
     setLoggingOut(true)
@@ -321,6 +341,7 @@ function ProfileRow({
         </div>
       </TD>
       <TD>
+        {suspenso ? <Badge tone="warning">Suspenso</Badge> : (
         <span className="inline-flex items-center gap-1.5 text-xs text-foreground/60">
           <span
             className={cn('h-2 w-2 shrink-0 rounded-full', online ? 'bg-success' : 'bg-foreground/20')}
@@ -328,6 +349,7 @@ function ProfileRow({
           />
           {online ? 'Online' : 'Offline'}
         </span>
+        )}
       </TD>
       <TD className="text-foreground/70">{profile.email}</TD>
       <TD>
@@ -376,6 +398,17 @@ function ProfileRow({
               Deslogar
             </button>
           )}
+          {canForceLogout && !isSelf && (
+            <button
+              type="button"
+              onClick={() => void alternarSuspensao()}
+              disabled={suspendendo}
+              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-warning hover:bg-warning/10 disabled:opacity-50"
+            >
+              {suspendendo && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              {suspenso ? 'Reativar' : 'Suspender'}
+            </button>
+          )}
           {!isSelf && (
             <button
               type="button"
@@ -413,7 +446,7 @@ function ProfileRow({
         <p className="text-sm text-foreground/75">
           Remove o acesso de{' '}
           <strong className="text-foreground">{profile.email}</strong> — o usuário
-          perde acesso ao painel imediatamente.
+          perde acesso ao painel imediatamente e sai desta lista. Histórico, lembretes e tarefas ficam guardados.
         </p>
       </Modal>
 

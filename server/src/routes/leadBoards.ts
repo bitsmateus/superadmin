@@ -1,3 +1,5 @@
+import { crmConsolidado, espelhoDeReuniao, pessoaSuspensa } from '../lib/crmConsolidado.js';
+import { comissoesDaVenda } from '../lib/regrasDaConsolidacao.js';
 import { MINIMO_DETALHE_MOTIVO, MOTIVOS_DESQUALIFICACAO } from '../lib/trafegoNicho.js';
 import { textoDeVerdade } from '../lib/textoDeVerdade.js';
 import { FastifyInstance } from 'fastify';
@@ -57,7 +59,7 @@ const SDR_TIPO_PADRAO = 'Venda sistema';
  */
 async function createCommissionStub(nome: string, sdr: string, month: string, vendaLeadId: string | null = null) {
   try {
-    if (!sdr?.trim()) return;
+    if (!sdr?.trim() || await pessoaSuspensa(sdr)) return;
     const padrao = await queryOne<{ id: string; label: string; rate_cents: number | null }>(
       `SELECT id, label, rate_cents FROM commission_types
        WHERE role = 'sdr' AND label = $1 AND kind = 'fixed' AND NOT archived LIMIT 1`,
@@ -186,7 +188,7 @@ async function sincronizarComissaoCloser(vendaLeadId: string) {
       [vendaLeadId, typeId]
     );
 
-    if (deveTer && !atual) {
+    if (deveTer && !atual && !(await pessoaSuspensa(closer))) {
       await query(
         // Nasce com o MESMO estado de contrato da venda — senão um fechamento lançado depois de o
         // contrato já ter sido assinado aparecia como pendente e exigia clicar de novo.
@@ -369,8 +371,8 @@ export async function restrictedBoardFilter(userId: string, role: string): Promi
 /** CRM TUBARAO (pedido de 13/11). O id é o de quando a aba foi criada; o nome na tela é "CRM TUBARAO". */
 export const PAGINA_TUBARAO = 'crm-outbound';
 
-/** O SDR humano do comercial (o do CRM TUBARAO). Ian, Mateus e Luis não viram SDR sozinhos. */
-const SDR_HUMANO = 'arthur';
+/** O SDR humano do comercial (o do CRM TUBARAO). Ian e Mateus não viram SDR sozinhos. */
+const SDR_HUMANO = 'luis';
 
 /**
  * O SDR de uma lead que entra no CRM TUBARAO: "Arthur" (a etiqueta de SDR dele) se foi ele que moveu ou se a lead
@@ -380,10 +382,12 @@ async function sdrDoTubarao(userId: string, sdrAtual: string): Promise<string> {
   const semAcento = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
   const primeiro = (s: string) => semAcento(s.trim().split(/\s+/)[0] ?? '');
   const perfil = await queryOne<{ name: string | null }>('SELECT name FROM profiles WHERE id = $1', [userId]);
-  const foiOArthur = primeiro(perfil?.name ?? '') === SDR_HUMANO;
-  if (!foiOArthur && sdrAtual.trim()) return sdrAtual;
+  // Lead que o Arthur trabalhou continua no nome dele (autoria não se reescreve).
+  if (primeiro(sdrAtual) === 'arthur') return sdrAtual;
+  const foiODono = primeiro(perfil?.name ?? '') === SDR_HUMANO;
+  if (!foiODono && sdrAtual.trim()) return sdrAtual;
   const etiquetas = await query<{ name: string }>(`SELECT name FROM lead_labels WHERE field = 'sdr' ORDER BY position`);
-  return etiquetas.find((l) => primeiro(l.name) === SDR_HUMANO)?.name ?? 'Arthur';
+  return etiquetas.find((l) => primeiro(l.name) === SDR_HUMANO)?.name ?? 'Luis';
 }
 
 async function getActorName(userId: string | null | undefined): Promise<string> {
@@ -570,17 +574,19 @@ async function syncVendaFromStatus(leadRowId: string, fromStatus: string, toStat
     // venda_lead_id liga o lançamento de comissão à linha da venda — é o que faz renomear a venda
     // (ou marcar o contrato como assinado) chegar sozinho na Comissão SDR.
     const mesDaVenda = new Date().toISOString().slice(0, 7);
-    void createCommissionStub(lead.nome, lead.sdr, mesDaVenda, vendaRow?.id ?? null);
+    const copiaNoCloser = await queryOne<{ id: string }>('SELECT id FROM lead_rows WHERE espelho_origem_id = $1', [leadRowId]);
+    const onde = await queryOne<{ page: string }>(
+      'SELECT lb.page FROM lead_rows r JOIN lead_boards lb ON lb.id = r.board_id WHERE r.id = $1', [leadRowId]);
+    const regra = comissoesDaVenda({
+      sdr: lead.sdr, temCopiaNoCloser: !!copiaNoCloser, consolidado: await crmConsolidado(), pagina: onde?.page ?? '',
+    });
+    if (regra.sdr) void createCommissionStub(lead.nome, lead.sdr, mesDaVenda, vendaRow?.id ?? null);
 
     // Lead que foi espelhada pro CRM do closer = quem fechou foi ele, não o SDR que agendou. A
     // venda já nasce com o campo "Fechou" preenchido, e é dele que sai a comissão de fechamento
     // (ver sincronizarComissaoCloser) — dá pra corrigir depois direto na aba Vendas.
     if (vendaRow?.id) {
-      const temEspelho = await queryOne<{ id: string }>(
-        'SELECT id FROM lead_rows WHERE espelho_origem_id = $1',
-        [leadRowId]
-      );
-      if (temEspelho) {
+      if (regra.closerLuis) {
         await query('UPDATE lead_rows SET closer = $1 WHERE id = $2', [CLOSER_PERSON, vendaRow.id]);
         void sincronizarComissaoCloser(vendaRow.id);
       }
@@ -604,9 +610,7 @@ async function syncVendaFromStatus(leadRowId: string, fromStatus: string, toStat
  *    com a lead que já estava trabalhando.
  * As Atualizações são compartilhadas (ver idCanonicoDasNotas): os dois escrevem no mesmo histórico.
  */
-/** CRMs cuja "Reunião agendada" vai pro closer: o do Arthur, o da IA Luiza e o OUTBOUND (aba da tela do Arthur). */
-const ESPELHO_PAGES_ORIGEM = ['crm-arthur', 'crm-ia-luiza', 'crm-outbound'];
-const ESPELHO_PAGE_DESTINO = 'crm-luis-closer';
+/* De onde sai e pra onde vai a cópia: lib/regrasDaConsolidacao.ts (muda quando os CRMs são consolidados). */
 
 /** Campos de CONTEÚDO que andam juntos. Fora daqui: status e board_id (funil é de cada um),
  * position, notes_count e o pacote de venda (esse só existe na aba Vendas). */
@@ -781,7 +785,8 @@ async function juntarOrigemNoEspelho(
 export async function completarEspelhoComAsOrigens(espelhoId: string) {
   await query(
     `UPDATE lead_rows c SET
-       sdr = CASE WHEN EXISTS (SELECT 1 FROM lead_rows o WHERE ${ORIGENS_DO_ESPELHO} AND o.sdr ~* 'luiza') THEN $2 ELSE c.sdr END,
+       sdr = CASE WHEN c.espelho_origem_id IS NOT NULL
+         AND EXISTS (SELECT 1 FROM lead_rows o WHERE ${ORIGENS_DO_ESPELHO} AND o.sdr ~* 'luiza') THEN $2 ELSE c.sdr END,
        dia_contato = COALESCE(NULLIF(c.dia_contato, ''), (
          SELECT o.dia_contato FROM lead_rows o JOIN lead_boards ob ON ob.id = o.board_id
          WHERE ${ORIGENS_DO_ESPELHO} AND o.dia_contato <> ''
@@ -810,8 +815,9 @@ export async function syncEspelhoReuniaoAgendada(leadRowId: string) {
       [leadRowId]
     );
     if (!lead) return;
-    // Só nasce do CRM do Arthur ou da IA Luiza, e só quando está de fato em "Reunião agendada".
-    if (!ESPELHO_PAGES_ORIGEM.includes(lead.page)) return;
+    // Só nasce dos CRMs de origem, e só quando está de fato em "Reunião agendada".
+    const { origens, destino: paginaDestino } = await espelhoDeReuniao();
+    if (!origens.includes(lead.page)) return;
     // A própria linha já é uma cópia (do closer ou da IA) — nunca espelha: a original já mandou a dela.
     if (lead.espelho_origem_id || lead.copia_ia_origem_id) return;
     if (lead.status !== MILESTONE_AGENDADA && !ehQuadroReuniaoAgendada(lead.board_name)) return;
@@ -820,18 +826,18 @@ export async function syncEspelhoReuniaoAgendada(leadRowId: string) {
       (await queryOne<{ id: string }>(
         `SELECT id FROM lead_boards WHERE page = $1 AND lower(name) LIKE '%agendada%'
          ORDER BY position LIMIT 1`,
-        [ESPELHO_PAGE_DESTINO]
+        [paginaDestino]
       )) ??
       (await queryOne<{ id: string }>(
         'SELECT id FROM lead_boards WHERE page = $1 ORDER BY position LIMIT 1',
-        [ESPELHO_PAGE_DESTINO]
+        [paginaDestino]
       ));
     // Sem CRM de destino configurado não há pra onde espelhar — silencioso de propósito: a lead do
     // Arthur segue normal.
     if (!destino) return;
 
     const ultimos8 = chaveTelefone(lead.telefone)?.ultimos8 ?? null;
-    const statusAgendada = (await etiquetaDeStatus(ESPELHO_PAGE_DESTINO, MILESTONE_AGENDADA)) ?? MILESTONE_AGENDADA;
+    const statusAgendada = (await etiquetaDeStatus(paginaDestino, MILESTONE_AGENDADA)) ?? MILESTONE_AGENDADA;
     let statusDeAntes: string | null = null;
     // Dentro da transação, só a conexão dela (db): nada de query() do pool com a trava do telefone segura.
     const espelhoId = await withTransaction(async (db) => {
@@ -851,7 +857,7 @@ export async function syncEspelhoReuniaoAgendada(leadRowId: string) {
            AND ($1::uuid = ANY(r.espelho_origens_extras)
              OR ($3::text IS NOT NULL AND right(regexp_replace(r.telefone, '\\D', '', 'g'), 8) = $3::text))
          ORDER BY ($1::uuid = ANY(r.espelho_origens_extras)) DESC, r.created_at ASC`,
-        [leadRowId, ESPELHO_PAGE_DESTINO, ultimos8]
+        [leadRowId, paginaDestino, ultimos8]
       );
       const aberto = candidatos.find((c) => !espelhoFechado(c.status, c.quadro) && (c.ligada || mesmoTelefone(c.telefone, lead.telefone)));
       if (aberto) {
@@ -901,6 +907,7 @@ export async function syncEspelhoReuniaoAgendada(leadRowId: string) {
  * Roda uma vez por subida; sem repetidos, não faz nada.
  */
 export async function juntarEspelhosRepetidos(): Promise<number> {
+  const { destino: paginaDestino } = await espelhoDeReuniao();
   const cards = await query<{
     id: string; telefone: string; status: string; quadro: string; posicao: number; pagina_da_origem: string | null;
     espelho_origem_id: string; espelho_origens_extras: string[]; created_at: Date;
@@ -911,7 +918,7 @@ export async function juntarEspelhosRepetidos(): Promise<number> {
      LEFT JOIN lead_rows o ON o.id = r.espelho_origem_id LEFT JOIN lead_boards ob ON ob.id = o.board_id
      WHERE lb.page = $1 AND NOT lb.is_vendas AND r.deleted_at IS NULL AND r.espelho_origem_id IS NOT NULL
        AND r.telefone <> ''`,
-    [ESPELHO_PAGE_DESTINO]
+    [paginaDestino]
   );
   const porChave = new Map<string, typeof cards>();
   for (const c of cards) {
@@ -956,7 +963,7 @@ export async function juntarEspelhosRepetidos(): Promise<number> {
     `SELECT c.id FROM lead_rows c JOIN lead_boards lb ON lb.id = c.board_id
      WHERE lb.page = $1 AND c.deleted_at IS NULL AND c.dia_contato = ''
        AND EXISTS (SELECT 1 FROM lead_rows o WHERE ${ORIGENS_DO_ESPELHO} AND o.dia_contato <> '')`,
-    [ESPELHO_PAGE_DESTINO]
+    [paginaDestino]
   );
   for (const c of semDia) await completarEspelhoComAsOrigens(c.id);
   return juntados;
@@ -1026,8 +1033,10 @@ export async function propagarEspelho(
       const ehEspelho = espelhoIds.includes(parceiro.id);
       const parceiroEhOriginal = !parceiro.espelho_origem_id && !parceiro.copia_ia_origem_id && !ehEspelho;
 
+      // Card do próprio closer (não é cópia) com origem extra: nunca é excluído por causa dela, só perde o vínculo.
+      const cardProprio = ehEspelho && !parceiro.espelho_origem_id;
       if (voltouProInicio) {
-        if (ehEspelho && outraOrigemNoFunil) {
+        if (cardProprio || (ehEspelho && outraOrigemNoFunil)) {
           await query(
             'UPDATE lead_rows SET espelho_origens_extras = array_remove(espelho_origens_extras, $2::uuid) WHERE id = $1',
             [parceiro.id, original]
@@ -1042,7 +1051,7 @@ export async function propagarEspelho(
 
       // O SDR da cópia da IA (e de qualquer card do CRM IA LUIZA) é sempre "IA Luiza" (é o CRM dela): ele não vai nem
       // vem por aqui. No card do closer, completarEspelhoComAsOrigens acerta o SDR depois.
-      const campos = parceiro.copia_ia_origem_id || copiaIaOrigemId || parceiro.page === PAGE_IA
+      const campos = parceiro.copia_ia_origem_id || copiaIaOrigemId || parceiro.page === PAGE_IA || cardProprio
         ? camposDoPatch.filter((k) => k !== 'sdr')
         : camposDoPatch;
       const sets: string[] = [];

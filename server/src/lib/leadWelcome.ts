@@ -47,7 +47,7 @@ async function registrar(leadRowId: string, type: 'template_sent' | 'template_fa
 
 /**
  * Manda o template de boas-vindas ao lead que acabou de cair do tráfego pago, com {{1}} = primeiro
- * nome e {{2}} = quem assina (padrão "Arthur"). Resultado vai pra linha do tempo do lead
+ * nome e {{2}} = quem assina (padrão "Luis"). Resultado vai pra linha do tempo do lead
  * (template_sent / template_failed) e pras colunas boas_vindas_* (selo no card). Nunca lança:
  * quem chama dispara em background e o webhook não pode falhar por causa do WhatsApp.
  */
@@ -65,7 +65,9 @@ export async function enviarBoasVindasLead(
   const baseUrl = (process.env.LEAD_WELCOME_NX_BASE_URL?.trim() || 'https://webapi.nxsystems.com.br').replace(/\/$/, '');
   const template = override?.template?.trim() || process.env.LEAD_WELCOME_TEMPLATE?.trim() || 'primeiro_dia';
   const language = override?.language?.trim() || process.env.LEAD_WELCOME_LANGUAGE?.trim() || 'en';
-  const sender = process.env.LEAD_WELCOME_SENDER?.trim() || 'Arthur';
+  // Variável ainda com o nome de quem saiu não vale.
+  const configurado = process.env.LEAD_WELCOME_SENDER?.trim() ?? '';
+  const sender = configurado && !/^arthur\b/i.test(configurado) ? configurado : 'Luis';
 
   try {
     const lead = await queryOne<{ nome: string; telefone: string; boas_vindas_enviada_em: string | null }>(

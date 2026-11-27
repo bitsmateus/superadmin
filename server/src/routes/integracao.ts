@@ -1,3 +1,5 @@
+import { crmConsolidado } from '../lib/crmConsolidado.js';
+import { etapaDoCloser, PAGINA_UNIFICADA } from '../lib/regrasDaConsolidacao.js';
 import { FastifyInstance } from 'fastify';
 import { query, queryOne, queryAsActor, withTransaction } from '../db.js';
 import {
@@ -559,7 +561,11 @@ export async function integracaoRoutes(app: FastifyInstance) {
     // As outras linhas da mesma lead (cópia do closer / da IA, ou a original) acompanham, como na tela.
     await propagarEspelho(id, atual.espelho_origem_id, campos, '', atual.copia_ia_origem_id, 'Automação', true);
     // Antes do espelho: a lead que a Luiza atendeu troca de dono, pro card do closer já nascer marcado "IA Luiza".
-    if ((moveu || 'status' in campos) && !('sdr' in campos)) await donoViraALuiza(id, atual.page);
+    // Depois da consolidação o CRM unificado é também o do closer: card que JÁ estava de "Reunião agendada" pra frente é
+    // dele, a IA não vira dona (antes essa fase vivia no CRM do closer, que ela não pegava).
+    const eraDoCloser = atual.page === PAGINA_UNIFICADA && await crmConsolidado()
+      && etapaDoCloser((await queryOne<{ name: string }>('SELECT name FROM lead_boards WHERE id = $1', [atual.board_id]))?.name);
+    if ((moveu || 'status' in campos) && !('sdr' in campos) && !eraDoCloser) await donoViraALuiza(id, atual.page);
     // Espelho do closer: igual à tela, quando a coluna ou o status mudou.
     if (moveu || 'status' in campos) await espelharSeReuniaoAgendada(id);
     // SDR virou "IA Luiza" num CRM de outro SDR: ganha a cópia no CRM IA LUIZA (ou perde, se desmarcar).

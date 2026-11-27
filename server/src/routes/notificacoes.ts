@@ -3,7 +3,8 @@ import { query, queryOne } from '../db.js';
 import { restrictedBoardFilter } from './leadBoards.js';
 import { abaDeFora } from '../lib/abasJuntas.js';
 import { donoDaAba, ehAPessoa } from '../lib/reuniaoResultado.js';
-import { PAGINA_DO_CLOSER, PAGINA_DO_SDR, linkDoCard } from '../lib/notificacoes.js';
+import { PAGINA_DO_SDR, linkDoCard } from '../lib/notificacoes.js';
+import { paginaDoCloser } from '../lib/crmConsolidado.js';
 
 /**
  * Sininho e popup das notificações do comercial (ver lib/notificacoes.ts). Cada um vê e marca só as suas. Admin, dentro
@@ -15,7 +16,7 @@ const JANELA = "INTERVAL '30 days'";
 /** O dono (perfil) de uma aba do comercial, pelo nome da aba (o CRM IA LUIZA é do dono do CRM ARTHUR). */
 export async function donoDaPagina(pagina: string): Promise<{ id: string; nome: string } | null> {
   const alvo = abaDeFora(pagina) ?? pagina;
-  if (![PAGINA_DO_SDR, PAGINA_DO_CLOSER].includes(alvo)) return null;
+  if (![PAGINA_DO_SDR, await paginaDoCloser()].includes(alvo)) return null;
   const [aba, sdrs, perfis] = await Promise.all([
     queryOne<{ name: string }>('SELECT name FROM lead_pages WHERE id = $1', [alvo]),
     query<{ name: string }>(`SELECT DISTINCT name FROM lead_labels WHERE field = 'sdr'`),
@@ -28,7 +29,7 @@ export async function donoDaPagina(pagina: string): Promise<{ id: string; nome: 
 
 /** Quem recebe notificação: o dono do CRM ARTHUR ou do CRM LUIS CLOSER (ou quem já tem alguma). */
 async function recebeNotificacao(userId: string): Promise<boolean> {
-  const [sdr, closer] = await Promise.all([donoDaPagina(PAGINA_DO_SDR), donoDaPagina(PAGINA_DO_CLOSER)]);
+  const [sdr, closer] = await Promise.all([donoDaPagina(PAGINA_DO_SDR), donoDaPagina(await paginaDoCloser())]);
   if (sdr?.id === userId || closer?.id === userId) return true;
   return !!(await queryOne('SELECT 1 FROM notificacao_destinatarios WHERE user_id = $1 LIMIT 1', [userId]));
 }

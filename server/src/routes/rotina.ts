@@ -2,7 +2,8 @@ import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { pool, query, queryOne } from '../db.js';
 import { abaDeFora } from '../lib/abasJuntas.js';
 import { dateParaAgendamento } from '../lib/reuniaoResultado.js';
-import { PAGINA_DO_CLOSER, PAGINA_DO_SDR } from '../lib/notificacoes.js';
+import { PAGINA_DO_SDR } from '../lib/notificacoes.js';
+import { paginaDoCloser } from '../lib/crmConsolidado.js';
 import {
   agoraLocal, ehDiaDeRotina, estadoDoBloco, podeMarcar, segundaDaSemana, somarDias, validarBlocos, type Bloco,
 } from '../lib/rotina.js';
@@ -13,7 +14,8 @@ import { donoDaPagina } from './notificacoes.js';
  * CLOSER — e quem marca é o dono da aba (pelo nome, a mesma regra do sininho). Admin, dentro de uma dessas abas, vê a
  * semana, marca folga e edita os blocos; não marca bloco por ninguém.
  */
-const PAGINAS_COM_ROTINA = [PAGINA_DO_SDR, PAGINA_DO_CLOSER];
+/** Depois da consolidação as duas são a mesma aba: uma rotina só (a junta). */
+const paginasComRotina = async () => [PAGINA_DO_SDR, await paginaDoCloser()];
 
 async function blocosDaPagina(pagina: string): Promise<Bloco[]> {
   const rows = await query<Bloco & { created_at: Date }>(
@@ -46,7 +48,7 @@ async function folgasNoPeriodo(pagina: string, de: string, ate: string): Promise
 /** De quem é a rotina pedida: a do dono daquela aba (pra ele marcar) ou, pro admin, só pra olhar. */
 async function rotinaPedida(sub: string, role: string, pagina: string) {
   const alvo = abaDeFora(pagina) ?? pagina;
-  if (!PAGINAS_COM_ROTINA.includes(alvo)) return null;
+  if (!(await paginasComRotina()).includes(alvo)) return null;
   const dono = await donoDaPagina(alvo);
   if (dono?.id === sub) return { pagina: alvo, dono, somente_leitura: false };
   return role === 'admin' ? { pagina: alvo, dono, somente_leitura: true } : null;
@@ -152,7 +154,7 @@ export async function rotinaRoutes(app: FastifyInstance) {
       if (role !== 'admin') return reply.status(403).send({ message: 'Acesso negado' });
       const pagina = abaDeFora(req.body?.pagina ?? '') ?? req.body?.pagina ?? '';
       const data = req.body?.data ?? '';
-      if (!PAGINAS_COM_ROTINA.includes(pagina) || !DATA.test(data)) return reply.status(400).send({ message: 'Aba ou data inválida.' });
+      if (!(await paginasComRotina()).includes(pagina) || !DATA.test(data)) return reply.status(400).send({ message: 'Aba ou data inválida.' });
       if (req.body?.folga) {
         const quem = await queryOne<{ name: string | null; email: string }>('SELECT name, email FROM profiles WHERE id = $1', [sub]);
         await query(
@@ -175,7 +177,7 @@ export async function rotinaRoutes(app: FastifyInstance) {
       const { role } = req.user as { role: string };
       if (role !== 'admin') return reply.status(403).send({ message: 'Acesso negado' });
       const pagina = abaDeFora(req.body?.pagina ?? '') ?? req.body?.pagina ?? '';
-      if (!PAGINAS_COM_ROTINA.includes(pagina)) return reply.status(400).send({ message: 'Aba sem rotina.' });
+      if (!(await paginasComRotina()).includes(pagina)) return reply.status(400).send({ message: 'Aba sem rotina.' });
       const v = validarBlocos(req.body);
       if ('erro' in v) return reply.status(400).send({ message: v.erro });
       const client = await pool.connect();

@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { v4 as uuidv4 } from 'uuid';
 import { addSseClient, removeSseClient } from '../sse.js';
 import { isOriginAllowed } from '../lib/corsOrigin.js';
+import { queryOne } from '../db.js';
 
 export async function sseRoutes(app: FastifyInstance) {
   // GET /api/events?token=<jwt>
@@ -20,6 +21,11 @@ export async function sseRoutes(app: FastifyInstance) {
         role = decoded.role;
       } catch {
         return reply.status(401).send({ message: 'Token inválido' });
+      }
+
+      // Usuário suspenso não recebe os avisos em tempo real.
+      if (await queryOne('SELECT 1 AS s FROM profiles WHERE id = $1 AND suspended_at IS NOT NULL', [userId])) {
+        return reply.status(401).send({ message: 'Usuário suspenso' });
       }
 
       const clientId = uuidv4();

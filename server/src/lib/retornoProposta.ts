@@ -10,7 +10,6 @@ import { agendamentoLegivel, agendamentoParaDate, dateParaAgendamento } from './
  * tempo que saem as contas de tentativas sem resposta e de adiamentos. Funções puras.
  */
 
-export const PAGINA_DO_CLOSER = 'crm-luis-closer';
 export const RESULTADOS_RETORNO = ['retornou', 'sem_resposta', 'adiar'] as const;
 export type ResultadoRetorno = (typeof RESULTADOS_RETORNO)[number];
 export const DESFECHOS = ['fechou', 'negociando', 'perdeu'] as const;

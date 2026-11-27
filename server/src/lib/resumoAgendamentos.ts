@@ -136,20 +136,18 @@ export function blocoReunioes(r: ReunioesDoDia): string[] {
   return out
 }
 
-// ── Ligações do dia (3C Plus, das abas do Arthur e do Luís) ──────────────────
+// ── Ligações do dia (3C Plus, do Luís) ───────────────────────────────────────
 
 export interface LigacoesDoDia {
-  arthur: number
   luis: number
 }
 
-/** Bloco das ligações: total das duas abas e quanto cada um fez. */
+/** Bloco das ligações do dia. */
 export function blocoLigacoes(l: LigacoesDoDia): string[] {
   return [
     '',
     '☎️ *Ligações*',
-    `Total de ligações: ${l.arthur + l.luis}`,
-    `• Arthur: ${l.arthur}`,
+    `Total de ligações: ${l.luis}`,
     `• Luís: ${l.luis}`,
   ]
 }

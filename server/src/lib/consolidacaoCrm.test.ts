@@ -31,7 +31,7 @@ test('quadro sem correspondente vira problema e não é inventado', () => {
   assert.match(r.problemas.join(' '), /Só ligação/);
 });
 
-test('duplicado (com/sem 55 e 9): fica o do destino, etapa mais recente, completa só vazios', () => {
+test('duplicado (com/sem 55 e 9): fica o do destino, etapa mais recente, completa só vazios, nada preenchido muda', () => {
   const r = plano([
     lead('dest', 'a-novos', { nome: 'Ana', telefone: '+55 54 99999-1234', sdr: 'Arthur', empresa: '', valor_mrr: 'R$ 100,00' }),
     lead('closer', 'c-follow', { nome: 'Ana', telefone: '5499991234', sdr: 'Luis', empresa: 'Loja', valor_mrr: 'R$ 200,00', movido_em: '2026-11-20T10:00:00Z' }),
@@ -43,21 +43,50 @@ test('duplicado (com/sem 55 e 9): fica o do destino, etapa mais recente, complet
   assert.deepEqual(d.saem.map((s) => s.id), ['closer']);
   assert.equal(d.etapaFinal.quadro, 'Follow up Propostas');
   assert.deepEqual(d.completar.map((c) => c.campo), ['empresa']);
+  assert.ok(!d.completar.some((c) => ['nome', 'sdr', 'valor_mrr'].includes(c.campo)));
   assert.ok(d.divergentes.some((x) => x.campo === 'sdr' && x.fica === 'Arthur'));
   assert.deepEqual(r.total, { destinoAntes: 1, doLuis: 1, doCloser: 1, arquivados: 1, esperadoNoFinal: 2 });
 });
 
-test('duplicado entre LUIS e CLOSER sem card no destino; e-mail e cópia automática também contam', () => {
+test('só telefone decide: mesmo e-mail não junta; cópia sem telefone não junta e é listada', () => {
   const r = plano([
-    lead('luis', 'l-novos', { email: 'a@b.com', vinculos: { atualizacoes: 3 } }),
+    lead('luis', 'l-novos', { email: 'a@b.com' }),
     lead('closer', 'c-agendada', { email: 'A@B.com' }),
-    lead('origem', 'a-agendada'),
+    lead('origem', 'a-agendada', { telefone: '54911112222' }),
     lead('copia', 'c-agendada', { espelho_origem_id: 'origem' }),
   ]);
-  assert.equal(r.duplicados.length, 2);
-  assert.equal(r.duplicados.find((d) => d.motivos.includes('mesmo e-mail'))!.fica.id, 'luis');
-  assert.equal(r.duplicados.find((d) => d.motivos.includes('cópia automática'))!.fica.id, 'origem');
+  assert.equal(r.duplicados.length, 0);
+  assert.deepEqual(r.copiasSeparadas.map((c) => [c.copia.id, c.origem.id]), [['copia', 'origem']]);
+  assert.equal(r.total.esperadoNoFinal, 4);
+});
+
+test('destino com dois cards do mesmo telefone: a cópia vai pra origem dela; o outro card segue a regra', () => {
+  const r = plano([
+    lead('d1', 'a-novos', { telefone: '54999990001', vinculos: { atualizações: 5 } }),
+    lead('d2', 'a-agendada', { telefone: '54999990001' }),
+    lead('copia', 'c-agendada', { telefone: '54999990001', espelho_origem_id: 'd2' }),
+    lead('solto', 'l-novos', { telefone: '54999990001' }),
+  ]);
+  const alvo = Object.fromEntries(r.duplicados.flatMap((d) => d.saem.map((s) => [s.id, d.fica.id])));
+  assert.equal(alvo.copia, 'd2');
+  assert.equal(alvo.solto, 'd2');
   assert.equal(r.total.esperadoNoFinal, 2);
+});
+
+test('régua: etapa final do card que sai traz o estado da régua dele; sem isso, nada muda', () => {
+  const r = plano([
+    lead('dest', 'a-novos', { telefone: '54977776666', regua: '', regua_etapa: '', entrou_coluna_em: '2026-11-01T00:00:00Z' }),
+    lead('sai', 'c-follow', { telefone: '54977776666', regua: 'proposta', regua_etapa: 'D3', entrou_coluna_em: '2026-11-18T00:00:00Z', movido_em: '2026-11-18T00:00:00Z' }),
+  ]);
+  const d = r.duplicados[0];
+  assert.deepEqual(d.regua.map((x) => x.campo).sort(), ['entrou_coluna_em', 'regua', 'regua_etapa']);
+  assert.deepEqual(r.reguaAlterada, { disparo: 0, followup: 1, naoCompareceu: 0 });
+  assert.ok(!d.completar.some((c) => c.campo.startsWith('regua')));
+  const r2 = plano([
+    lead('dest', 'a-follow', { telefone: '54977776666', regua: 'proposta', movido_em: '2026-11-20T00:00:00Z' }),
+    lead('sai', 'c-agendada', { telefone: '54977776666', regua: 'disparo' }),
+  ]);
+  assert.deepEqual(r2.duplicados[0].regua, []);
 });
 
 test('CRM IA LUIZA não entra na junção: só é listado; lixeira não conta', () => {

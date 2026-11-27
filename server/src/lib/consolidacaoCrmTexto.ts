@@ -18,6 +18,7 @@ export function textoDoRelatorio(p: Plano, r: ReferenciasDoBanco, geradoEm: stri
   L.push(`# Simulação da consolidação dos CRMs — ${dia(geradoEm)}`, 'NADA FOI ALTERADO.');
   if (p.destino) L.push(`Destino: ${p.destino.nomeAtual} (id ${p.destino.id}) → passa a se chamar ${p.destino.nomeNovo}.`);
   L.push(`Origens: ${p.origens.map((o) => `${o.nome} (${o.id})`).join(', ') || '—'}.`);
+  L.push('Duplicado = somente o mesmo telefone. Lixeira e duplicados que já existiam no destino não são tocados. Juntar não mexe em comissão.');
 
   titulo(`O que impede a execução (${p.problemas.length})`);
   L.push(...(p.problemas.length ? p.problemas.map((x) => `- ${x}`) : ['- nada']));
@@ -51,12 +52,21 @@ export function textoDoRelatorio(p: Plano, r: ReferenciasDoBanco, geradoEm: stri
     L.push(`   etapa final: ${d.etapaFinal.quadro ?? '?'} (movimento mais recente: ${d.etapaFinal.vemDe}, ${dia(d.etapaFinal.quando)})`);
     if (d.completar.length) L.push(`   completa: ${d.completar.map((c) => `${c.campo} = ${c.valor}`).join(' | ')}`);
     if (d.divergentes.length) L.push(`   diferentes (vale o do que fica): ${d.divergentes.map((c) => `${c.campo}: "${c.fica}" x "${c.outro}"`).join(' | ')}`);
+    if (d.regua.length) L.push(`   régua vem do card que sai: ${d.regua.map((c) => `${c.campo}: ${c.de} → ${c.para}`).join(' | ')}`);
   });
   if (!p.duplicados.length) L.push('- nenhum');
 
   titulo(`Duplicados que já existem dentro do próprio destino (${p.duplicadosSoNoDestino.length}) — não são tocados`);
   for (const g of p.duplicadosSoNoDestino) L.push(`- ${g.map((l) => `${quem(l)} [${l.quadro}]`).join('  ==  ')}`);
   if (!p.duplicadosSoNoDestino.length) L.push('- nenhum');
+
+  titulo(`Cópias automáticas que NÃO juntam com a origem (telefone diferente ou vazio) (${p.copiasSeparadas.length})`);
+  for (const c of p.copiasSeparadas) L.push(`- ${quem(c.copia)} [${c.copia.aba} / ${c.copia.quadro}] — origem no destino: ${quem(c.origem)} [${c.origem.quadro}] → vira um card a mais`);
+  if (!p.copiasSeparadas.length) L.push('- nenhuma');
+
+  titulo('Régua: cards que terão o estado da régua trocado pelo do card que sai');
+  L.push(`Disparo em massa: ${p.reguaAlterada.disparo} · Follow up: ${p.reguaAlterada.followup} · Reunião não comparecida: ${p.reguaAlterada.naoCompareceu}`);
+  L.push('Nos demais cards movidos, entrou_coluna_em e os campos da régua ficam como estão.');
 
   titulo(`Batem com CRM IA LUIZA / CRM TUBARAO (${p.comProtegidas.length}) — nesses nada é alterado`);
   for (const c of p.comProtegidas) L.push(`- ${quem(c.lead)} [${c.lead.aba} / ${c.lead.quadro}] ↔ ${c.protegido.aba} / ${c.protegido.quadro} (${c.motivo})`);

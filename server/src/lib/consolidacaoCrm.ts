@@ -2,8 +2,9 @@
  * Consolidação dos CRMs do Comercial: CRM LUIS e CRM LUIS CLOSER entram no CRM ARTHUR (que passa a se chamar
  * "CRM LUIS ATUALIZADO"; o id `crm-arthur` não muda). Aqui só se MONTA O PLANO — função pura, não grava nada.
  *
- * Duplicado = mesmo telefone (com/sem 55, com/sem o 9), mesmo e-mail, ou card ligado a outro pela cópia automática
- * (espelho do closer / cópia da IA). CRM IA LUIZA e CRM TUBARAO não entram na junção: o que bate com eles só é listado.
+ * Duplicado = SOMENTE o mesmo telefone (com/sem 55, com/sem o 9). Cópia automática vai pro card de origem dela quando ele
+ * está no destino. CRM IA LUIZA e CRM TUBARAO não entram na junção: o que bate com eles só é listado. Lixeira e
+ * duplicados que já existiam no destino não são tocados. Juntar não recalcula nem relança comissão.
  */
 import { chaveTelefone, mesmoTelefone } from './integracaoCards.js';
 import { normalizaNome } from './normalizaNome.js';
@@ -41,6 +42,8 @@ export interface Duplicado {
   etapaFinal: { quadro: string | null; vemDe: string; quando: string };
   completar: { campo: string; valor: string; de: string }[];
   divergentes: { campo: string; fica: string; outro: string; de: string }[];
+  /** Estado da régua copiado do card que sai (quando a etapa final vem dele). */
+  regua: { campo: string; de: string; para: string }[];
   alertas: string[];
 }
 
@@ -55,6 +58,8 @@ export interface Plano {
   mapeamento: { aba: string; quadro: string; destino: string | null; leads: number; parecidos: string[] }[];
   duplicados: Duplicado[];
   duplicadosSoNoDestino: LeadResumo[][];
+  copiasSeparadas: { copia: LeadResumo; origem: LeadResumo }[];
+  reguaAlterada: { disparo: number; followup: number; naoCompareceu: number };
   comProtegidas: { lead: LeadResumo; protegido: LeadResumo; motivo: string }[];
   etiquetasACriar: { campo: string; nome: string; cor: string; leads: number }[];
   responsavelMuda: number;
@@ -67,10 +72,8 @@ const texto = (v: unknown): string => (typeof v === 'string' ? v.trim() : v === 
 /** Nome de quadro pra comparar: sem acento/maiúscula/pontuação e sem o que vem entre parênteses ("(após 3 tentativas)"). */
 export const chaveDoQuadro = (nome: string): string => normalizaNome(nome.replace(/\([^)]*\)/g, ' '));
 
-const emailValido = (v: unknown): string => {
-  const e = texto(v).toLowerCase();
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) ? e : '';
-};
+/** O que a régua (n8n) lê e grava no card. */
+export const CAMPOS_DA_REGUA = ['entrou_coluna_em', 'regua', 'regua_etapa', 'regua_status', 'regua_ultimo_envio_em'];
 /** Os 8 dígitos finais, quando o telefone serve pra comparar (fora número repetido tipo 99999999). */
 const chaveFone = (v: unknown): string => {
   const k = chaveTelefone(texto(v))?.ultimos8 ?? '';
@@ -124,6 +127,7 @@ export function montarPlano({ abas, quadros, etiquetas, leads }: Entrada): Plano
   const ativos = noEscopo.filter((l) => !l.deleted_at);
   const protegidos = leads.filter((l) => !l.deleted_at && PAGINAS_PROTEGIDAS.includes(paginaDo(l)));
 
+  const vendasDe = (l: Lead) => l.vinculos['vendas'] ?? 0;
   const resumo = (l: Lead): LeadResumo => {
     const q = quadroPorId.get(l.board_id);
     return {
@@ -167,7 +171,7 @@ export function montarPlano({ abas, quadros, etiquetas, leads }: Entrada): Plano
     }
   }
 
-  // ── grupos de duplicados (união por telefone, e-mail e cópia automática) ──
+  // ── duplicados: SOMENTE mesmo telefone (com/sem 55, com/sem o 9). Nome, empresa e e-mail não decidem nada. ──
   const pai = new Map<string, string>(ativos.map((l) => [l.id, l.id]));
   const raiz = (id: string): string => {
     let r = id;
@@ -175,38 +179,25 @@ export function montarPlano({ abas, quadros, etiquetas, leads }: Entrada): Plano
     pai.set(id, r);
     return r;
   };
-  const motivosDe = new Map<string, Set<string>>();
-  const unir = (a: string, b: string, motivo: string) => {
-    if (a === b || !pai.has(a) || !pai.has(b)) return;
-    for (const id of [a, b]) motivosDe.set(id, (motivosDe.get(id) ?? new Set()).add(motivo));
-    pai.set(raiz(a), raiz(b));
-  };
   const porFone = new Map<string, Lead[]>();
-  const porEmail = new Map<string, Lead[]>();
   for (const l of ativos) {
     const f = chaveFone(l.telefone);
-    if (f) {
-      for (const outro of porFone.get(f) ?? []) if (mesmoTelefone(texto(l.telefone), texto(outro.telefone))) unir(l.id, outro.id, 'mesmo telefone');
-      porFone.set(f, [...(porFone.get(f) ?? []), l]);
+    if (!f) continue;
+    for (const outro of porFone.get(f) ?? []) {
+      if (mesmoTelefone(texto(l.telefone), texto(outro.telefone))) pai.set(raiz(l.id), raiz(outro.id));
     }
-    const e = emailValido(l.email);
-    if (e) {
-      if (porEmail.has(e)) unir(l.id, porEmail.get(e)![0].id, 'mesmo e-mail');
-      porEmail.set(e, [...(porEmail.get(e) ?? []), l]);
-    }
+    porFone.set(f, [...(porFone.get(f) ?? []), l]);
   }
-  const origensDoCard = (l: Lead): string[] => [
-    l.espelho_origem_id, l.copia_ia_origem_id, ...(Array.isArray(l.espelho_origens_extras) ? l.espelho_origens_extras : []),
-  ].filter((x): x is string => typeof x === 'string' && !!x);
-  for (const l of ativos) for (const o of origensDoCard(l)) unir(l.id, o, 'cópia automática');
-
   const grupos = new Map<string, Lead[]>();
   for (const l of ativos) grupos.set(raiz(l.id), [...(grupos.get(raiz(l.id)) ?? []), l]);
 
+  /** A origem que o sistema registrou pra uma cópia automática (closer ou IA), se for cópia. */
+  const origemRegistrada = (l: Lead): string | null => texto(l.espelho_origem_id) || texto(l.copia_ia_origem_id) || null;
   const instante = (l: Lead) => Date.parse(texto(l.movido_em)) || 0;
   const peso = (l: Lead) => Object.values(l.vinculos).reduce((s, n) => s + n, 0);
   const noDestino = (l: Lead) => paginaDo(l) === PAGINA_DESTINO;
-  const copia = (l: Lead) => !!(l.espelho_origem_id || l.copia_ia_origem_id);
+  const copia = (l: Lead) => !!origemRegistrada(l);
+  const porId = new Map(ativos.map((l) => [l.id, l]));
 
   const duplicados: Duplicado[] = [];
   const duplicadosSoNoDestino: LeadResumo[][] = [];
@@ -214,72 +205,115 @@ export function montarPlano({ abas, quadros, etiquetas, leads }: Entrada): Plano
   const sobreviventes = new Map<string, Record<string, unknown>>();
   for (const grupo of grupos.values()) {
     if (grupo.length < 2) continue;
+    const doDest = grupo.filter(noDestino);
     const deOrigem = grupo.filter((l) => !noDestino(l));
     if (!deOrigem.length) { duplicadosSoNoDestino.push(grupo.map(resumo)); continue; }
-    const doDest = grupo.filter(noDestino);
-    // Fica: o do destino (de preferência a original de quem tem cópia); sem ele, a original com mais histórico.
-    const apontados = new Set(grupo.flatMap(origensDoCard));
+    // Regra atual: o do destino (de preferência a origem de uma cópia, depois o que não é cópia, o com mais histórico, o
+    // movido por último); sem card no destino, a mesma ordem entre os que chegam.
+    const apontados = new Set(grupo.map(origemRegistrada).filter((x): x is string => !!x));
     const ordenar = (a: Lead, b: Lead) => Number(apontados.has(b.id)) - Number(apontados.has(a.id))
       || Number(copia(a)) - Number(copia(b)) || peso(b) - peso(a) || instante(b) - instante(a) || a.id.localeCompare(b.id);
-    const fica = [...(doDest.length ? doDest : grupo)].sort(ordenar)[0];
-    const saem = deOrigem.filter((l) => l.id !== fica.id);
-    if (!saem.length) continue;
-    saem.forEach((l) => arquivados.add(l.id));
-
-    // Etapa final: a do card movido por último.
-    const maisRecente = [fica, ...saem].sort((a, b) => instante(b) - instante(a))[0];
-    const quadroFinal = destinoDoQuadro.get(maisRecente.board_id) ?? null;
-    if (!quadroFinal) {
-      problemas.push(`Duplicado "${texto(fica.nome) || texto(fica.empresa)}": a etapa mais recente está num quadro sem correspondente.`);
+    const padrao = [...(doDest.length ? doDest : grupo)].sort(ordenar)[0];
+    // Cópia automática vai pro card de origem dela, se ele está no destino; o resto, pro padrão.
+    const alvoDe = (l: Lead): string => {
+      const o = origemRegistrada(l);
+      return o && doDest.some((d) => d.id === o) ? o : padrao.id;
+    };
+    const porAlvo = new Map<string, Lead[]>();
+    for (const l of deOrigem) {
+      if (l.id === padrao.id) continue;
+      const a = alvoDe(l);
+      porAlvo.set(a, [...(porAlvo.get(a) ?? []), l]);
     }
+    const intocados = doDest.filter((d) => !porAlvo.has(d.id));
 
-    const completar: Duplicado['completar'] = [];
-    const divergentes: Duplicado['divergentes'] = [];
-    const junto: Record<string, unknown> = { ...fica };
-    for (const outro of [...saem].sort((a, b) => instante(b) - instante(a))) {
-      for (const [campo, valor] of Object.entries(outro)) {
-        if (NAO_COMPLETA.has(campo) || !completavel(valor)) continue;
-        if (vazio(junto[campo])) {
-          junto[campo] = valor;
-          completar.push({ campo, valor: mostrar(valor), de: `${resumo(outro).aba} / ${resumo(outro).quadro}` });
-        } else if (CAMPOS_DE_ETIQUETA.some(([c]) => c === campo) || ['nome', 'empresa', 'valor_mrr', 'valor_implementacao', 'agendamento'].includes(campo)) {
-          if (normalizaNome(String(junto[campo])) !== normalizaNome(String(valor))) {
-            divergentes.push({ campo, fica: mostrar(junto[campo]), outro: mostrar(valor), de: resumo(outro).aba });
+    for (const [alvoId, saem] of porAlvo) {
+      const fica = porId.get(alvoId)!;
+      saem.forEach((l) => arquivados.add(l.id));
+
+      // Etapa final: a do card movido por último.
+      const maisRecente = [fica, ...saem].sort((a, b) => instante(b) - instante(a))[0];
+      const quadroFinal = destinoDoQuadro.get(maisRecente.board_id) ?? null;
+      if (!quadroFinal) {
+        problemas.push(`Duplicado com o telefone ${texto(fica.telefone)}: a etapa mais recente está num quadro sem correspondente.`);
+      }
+
+      // Só o que está VAZIO no que fica; nada preenchido dele muda.
+      const completar: Duplicado['completar'] = [];
+      const divergentes: Duplicado['divergentes'] = [];
+      const junto: Record<string, unknown> = { ...fica };
+      for (const outro of [...saem].sort((a, b) => instante(b) - instante(a))) {
+        for (const [campo, valor] of Object.entries(outro)) {
+          if (NAO_COMPLETA.has(campo) || !completavel(valor)) continue;
+          if (vazio(junto[campo])) {
+            junto[campo] = valor;
+            completar.push({ campo, valor: mostrar(valor), de: `${resumo(outro).aba} / ${resumo(outro).quadro}` });
+          } else if (CAMPOS_DE_ETIQUETA.some(([c]) => c === campo) || ['nome', 'empresa', 'valor_mrr', 'valor_implementacao', 'agendamento'].includes(campo)) {
+            if (normalizaNome(String(junto[campo])) !== normalizaNome(String(valor))) {
+              divergentes.push({ campo, fica: mostrar(junto[campo]), outro: mostrar(valor), de: resumo(outro).aba });
+            }
           }
         }
       }
-    }
-    sobreviventes.set(fica.id, junto);
+      // Régua: etapa final vinda do card que sai = o estado da régua dele vem junto.
+      const regua: Duplicado['regua'] = [];
+      if (maisRecente.id !== fica.id) {
+        for (const campo of CAMPOS_DA_REGUA) {
+          if (mostrar(maisRecente[campo] ?? '') !== mostrar(fica[campo] ?? '')) {
+            regua.push({ campo, de: mostrar(fica[campo] ?? '') || '—', para: mostrar(maisRecente[campo] ?? '') || '—' });
+          }
+          junto[campo] = maisRecente[campo];
+        }
+      }
+      sobreviventes.set(fica.id, junto);
 
-    const alertas: string[] = [];
-    const nomes = new Set([fica, ...saem].map((l) => normalizaNome(texto(l.nome))).filter(Boolean));
-    if (nomes.size > 1) alertas.push('nomes diferentes: confira se é a mesma pessoa');
-    const ddds = new Set([fica, ...saem].map((l) => chaveTelefone(texto(l.telefone))?.ddd).filter(Boolean));
-    if (ddds.size > 1) alertas.push('DDDs diferentes');
-    if ([fica, ...saem].some((l) => l.optout === true)) alertas.push('pediu pra não receber mensagem (opt-out): isso vale pro card que fica');
-    const atual = destinoDoQuadro.get(fica.board_id);
-    if (quadroFinal && atual && quadroFinal.position < atual.position) {
-      alertas.push(`a movimentação mais recente VOLTA no funil (de "${atual.name}" pra "${quadroFinal.name}")`);
-    }
-    if (doDest.length > 1) alertas.push('já havia mais de um card no destino: os outros ficam como estão');
+      const alertas: string[] = [];
+      if ([fica, ...saem].some((l) => l.optout === true)) alertas.push('pediu pra não receber mensagem (opt-out) em um dos cards');
+      const atual = destinoDoQuadro.get(fica.board_id);
+      if (quadroFinal && atual && quadroFinal.position < atual.position) {
+        alertas.push(`a movimentação mais recente VOLTA no funil (de "${atual.name}" pra "${quadroFinal.name}")`);
+      }
+      if (doDest.length > 1) alertas.push(`o destino já tem ${doDest.length} cards com esse telefone: os outros ficam como estão`);
+      if (saem.some((l) => vendasDe(l) > 0) && vendasDe(fica) + saem.reduce((s, l) => s + vendasDe(l), 0) > 1) {
+        alertas.push('mais de um card com venda registrada: a venda do que sai fica ligada a ele (só pode haver uma por card)');
+      }
 
-    duplicados.push({
-      motivos: [...new Set([fica, ...saem].flatMap((l) => [...(motivosDe.get(l.id) ?? [])]))],
-      fica: resumo(fica), saem: saem.map(resumo), intocadosNoDestino: doDest.filter((l) => l.id !== fica.id).map(resumo),
-      etapaFinal: { quadro: quadroFinal?.name ?? null, vemDe: `${resumo(maisRecente).aba} / ${resumo(maisRecente).quadro}`, quando: texto(maisRecente.movido_em) },
-      completar, divergentes, alertas,
-    });
+      duplicados.push({
+        motivos: ['mesmo telefone', ...(saem.some((l) => origemRegistrada(l) === fica.id) ? ['cópia automática dele'] : [])],
+        fica: resumo(fica), saem: saem.map(resumo), intocadosNoDestino: intocados.map(resumo),
+        etapaFinal: { quadro: quadroFinal?.name ?? null, vemDe: `${resumo(maisRecente).aba} / ${resumo(maisRecente).quadro}`, quando: texto(maisRecente.movido_em) },
+        completar, divergentes, regua, alertas,
+      });
+    }
+  }
+
+  // Cópia automática cuja origem está no destino mas com outro telefone (ou sem telefone): pela regra, não junta — vira
+  // um card a mais no destino. Só lista.
+  const copiasSeparadas: Plano['copiasSeparadas'] = [];
+  for (const l of ativos.filter((x) => !noDestino(x) && !arquivados.has(x.id))) {
+    const o = origemRegistrada(l);
+    const origem = o ? porId.get(o) : undefined;
+    if (origem && noDestino(origem) && raiz(origem.id) !== raiz(l.id)) copiasSeparadas.push({ copia: resumo(l), origem: resumo(origem) });
   }
 
   // ── o que bate com CRM IA LUIZA / CRM TUBARAO (só lista) ──
   const comProtegidas: Plano['comProtegidas'] = [];
   for (const l of ativos.filter((x) => !noDestino(x))) {
     for (const p of protegidos) {
-      const motivo = origensDoCard(l).includes(p.id) || origensDoCard(p).includes(l.id) ? 'cópia automática'
-        : chaveFone(l.telefone) && mesmoTelefone(texto(l.telefone), texto(p.telefone)) ? 'mesmo telefone'
-          : emailValido(l.email) && emailValido(l.email) === emailValido(p.email) ? 'mesmo e-mail' : '';
+      const motivo = origemRegistrada(l) === p.id || origemRegistrada(p) === l.id ? 'cópia automática'
+        : chaveFone(l.telefone) && mesmoTelefone(texto(l.telefone), texto(p.telefone)) ? 'mesmo telefone' : '';
       if (motivo) comProtegidas.push({ lead: resumo(l), protegido: resumo(p), motivo });
     }
+  }
+
+  // Cards de régua (Disparo em massa, Follow up, Reunião não comparecida) que terão o estado da régua alterado.
+  const reguaAlterada = { disparo: 0, followup: 0, naoCompareceu: 0 };
+  for (const d of duplicados) {
+    if (!d.regua.length) continue;
+    const q = chaveDoQuadro(d.etapaFinal.quadro ?? '');
+    if (q.startsWith('disparoemmassa')) reguaAlterada.disparo++;
+    else if (q.startsWith('follow')) reguaAlterada.followup++;
+    else if (q === 'reuniaonaocomparecida') reguaAlterada.naoCompareceu++;
   }
 
   // ── etiquetas que precisam existir no destino (as colunas do sistema são as mesmas em todas as abas) ──
@@ -326,6 +360,8 @@ export function montarPlano({ abas, quadros, etiquetas, leads }: Entrada): Plano
     mapeamento,
     duplicados,
     duplicadosSoNoDestino,
+    copiasSeparadas,
+    reguaAlterada,
     comProtegidas,
     etiquetasACriar: [...faltam.values()],
     responsavelMuda: finais.filter((l) => normalizaNome(texto(l.responsavel)) !== 'luis').length,

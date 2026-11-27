@@ -6,7 +6,9 @@
 import { FastifyInstance } from 'fastify';
 import type { PoolClient } from 'pg';
 import { queryOne, withTransaction } from '../db.js';
-import { assinaturaDoPlano, ErroDaConsolidacao, executarConsolidacao, textoDoResultado, type ResultadoDaExecucao } from '../lib/consolidacaoExecucao.js';
+import {
+  assinaturaDoPlano, conflitosDeVinculo, ErroDaConsolidacao, executarConsolidacao, textoDoResultado, textoDosConflitos, type ResultadoDaExecucao,
+} from '../lib/consolidacaoExecucao.js';
 import { montarPlano, PAGINA_CLOSER, PAGINA_DESTINO, PAGINAS_PROTEGIDAS, type Aba, type Etiqueta, type Lead, type Quadro } from '../lib/consolidacaoCrm.js';
 import { textoDoRelatorio, type ReferenciasDoBanco } from '../lib/consolidacaoCrmTexto.js';
 import { restrictedBoardFilter } from './leadBoards.js';
@@ -95,11 +97,15 @@ export async function consolidacaoCrmRoutes(app: FastifyInstance) {
     const { role } = req.user as { role?: string };
     if (role !== 'admin') return reply.status(403).send({ message: 'Só administrador.' });
 
-    const { dados, refs } = await withTransaction(async (db) => {
+    const { dados, refs, plano, conflitos } = await withTransaction(async (db) => {
       await db.query('SET TRANSACTION READ ONLY');
-      return { dados: await lerTudo(db), refs: await referencias(db) };
+      const lidos = await lerTudo(db);
+      const p = montarPlano(lidos);
+      return {
+        dados: lidos, refs: await referencias(db), plano: p,
+        conflitos: await conflitosDeVinculo(db, p.acoes.juntar, 'antes'),
+      };
     });
-    const plano = montarPlano(dados);
     const quadrosDoDestino = new Set(dados.quadros.filter((q) => q.page === PAGINA_DESTINO).map((q) => q.id));
     const pessoas: ReferenciasDoBanco['pessoas'] = [];
     for (const p of refs.perfis) {
@@ -109,9 +115,13 @@ export async function consolidacaoCrmRoutes(app: FastifyInstance) {
     const geradoEm = new Date().toISOString();
     const referenciasDoBanco: ReferenciasDoBanco = { pessoas, doArthur: refs.doArthur, ambiente: refs.ambiente };
     const assinatura = assinaturaDoPlano(plano);
+    const textoConflitos = [
+      `## Conflito de reunião/venda (${conflitos.length}) — o card que fica já tem um, então este continua ligado ao card arquivado`,
+      ...textoDosConflitos(conflitos),
+    ].join('\n');
     return {
-      geradoEm, plano, assinatura, referencias: referenciasDoBanco,
-      texto: `${textoDoRelatorio(plano, referenciasDoBanco, geradoEm)}\n\nAssinatura deste plano: ${assinatura}`,
+      geradoEm, plano, assinatura, conflitos, referencias: referenciasDoBanco,
+      texto: `${textoDoRelatorio(plano, referenciasDoBanco, geradoEm)}\n\n${textoConflitos}\n\nAssinatura deste plano: ${assinatura}`,
     };
   });
 

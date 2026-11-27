@@ -19,11 +19,16 @@ export const MOTIVO = 'Consolidação dos CRMs: juntado no card';
 /** Tabelas copiadas antes de qualquer alteração. */
 export const TABELAS_DO_BACKUP = [
   'lead_rows', 'lead_notes', 'lead_events', 'lead_board_history', 'lead_avisos', 'notificacoes', 'reminders', 'contracts',
-  'clients', 'reuniao_resultados', 'reuniao_adiamentos', 'lead_labels', 'lead_pages', 'lead_boards',
+  'clients', 'reuniao_resultados', 'reuniao_adiamentos', 'lead_labels', 'lead_pages', 'lead_boards', 'commission_entries',
 ];
 
-/** Onde o card que sai pode estar ligado: tudo passa pro card que fica. */
-const RELIGAR: { tabela: string; coluna: string; unico?: string }[] = [
+/**
+ * Onde o card que sai pode estar ligado: tudo passa pro card que fica.
+ *  - unico: o banco só aceita um por (card, coluna `unico`) — se o que fica já tem, o do que sai continua nele.
+ *  - soUm: o banco só aceita um por card — se o que fica já tem, o do que sai continua nele.
+ * O que continua no card arquivado é o "conflito" listado na simulação e na conferência.
+ */
+const RELIGAR: { tabela: string; coluna: string; unico?: string; soUm?: boolean; conflito?: string }[] = [
   { tabela: 'lead_notes', coluna: 'lead_row_id' },
   { tabela: 'lead_events', coluna: 'lead_row_id' },
   { tabela: 'lead_board_history', coluna: 'lead_row_id' },
@@ -35,9 +40,43 @@ const RELIGAR: { tabela: string; coluna: string; unico?: string }[] = [
   { tabela: 'clients', coluna: 'crm_card_id' },
   { tabela: 'reuniao_resultados', coluna: 'card_id' },
   // Uma por (lead, horário): se o que fica já tem a mesma, a do que sai continua nele (fica no backup e no arquivado).
-  { tabela: 'reuniao_resultados', coluna: 'lead_row_id', unico: 'agendamento' },
-  { tabela: 'reuniao_adiamentos', coluna: 'familia', unico: 'agendamento' },
+  { tabela: 'reuniao_resultados', coluna: 'lead_row_id', unico: 'agendamento', conflito: 'resultado de reunião' },
+  { tabela: 'reuniao_adiamentos', coluna: 'familia', unico: 'agendamento', conflito: 'adiamento de reunião' },
+  // Uma venda por lead (a linha da aba Vendas aponta pro lead de origem) e uma comissão de entrega por card.
+  { tabela: 'lead_rows', coluna: 'venda_origem_id', soUm: true, conflito: 'venda' },
+  { tabela: 'commission_entries', coluna: 'lead_row_id', soUm: true, conflito: 'comissão de entrega' },
 ];
+
+export interface ConflitoDeVinculo { sai: string; fica: string; nome: string; oque: string; detalhe: string }
+
+/**
+ * Vínculos que NÃO passam pro card que fica (o banco só aceita um) e continuam ligados ao card arquivado.
+ *  - antes de religar (simulação): prevê, na mesma ordem em que a execução junta — um card que recebe dois juntados conta
+ *    o que o primeiro já levou;
+ *  - depois de religar (execução): o que de fato ficou no card arquivado.
+ */
+export async function conflitosDeVinculo(
+  db: PoolClient, juntar: { sai: string; fica: string }[], momento: 'antes' | 'depois',
+): Promise<ConflitoDeVinculo[]> {
+  if (!juntar.length) return [];
+  const sai = juntar.map((j) => j.sai);
+  const fica = juntar.map((j) => j.fica);
+  const partes = RELIGAR.filter((r) => r.conflito).map((r) => {
+    const detalhe = r.unico ? `t.${r.unico}::text` : "''";
+    // Quem o card que fica já tem: ele mesmo, ou um juntado antes dele (mesmo card que fica, ordem menor).
+    const igual = r.unico ? ` AND x.${r.unico} = t.${r.unico}` : '';
+    const jaTem = `EXISTS (SELECT 1 FROM ${r.tabela} x WHERE (x.${r.coluna} = p.fica
+        OR x.${r.coluna} IN (SELECT o.sai FROM p o WHERE o.fica = p.fica AND o.ordem < p.ordem))${igual})`;
+    return `SELECT p.sai, p.fica, '${r.conflito}' AS oque, ${detalhe} AS detalhe FROM p JOIN ${r.tabela} t ON t.${r.coluna} = p.sai
+      ${momento === 'antes' ? `WHERE ${jaTem}` : ''}`;
+  });
+  const rows = (await db.query(
+    `WITH p AS (SELECT * FROM unnest($1::uuid[], $2::uuid[]) WITH ORDINALITY AS p(sai, fica, ordem))
+     SELECT c.sai::text, c.fica::text, c.oque, c.detalhe, COALESCE(NULLIF(l.nome, ''), 'sem nome') AS nome
+     FROM (${partes.join('\n UNION ALL ')}) c LEFT JOIN lead_rows l ON l.id = c.fica
+     ORDER BY nome, c.oque`, [sai, fica])).rows as ConflitoDeVinculo[];
+  return rows;
+}
 
 /** Assinatura do que vai ser feito: muda se qualquer decisão do plano mudar entre a simulação e a execução. */
 export function assinaturaDoPlano(p: Plano): string {
@@ -66,6 +105,15 @@ export interface ResultadoDaExecucao {
   contagens: Record<string, number>;
   regua: { disparo: number; followup: number; naoCompareceu: number; outros: number };
   conferencias: { item: string; ok: boolean; detalhe: string }[];
+  /** Resultado de reunião / adiamento / venda / comissão de entrega que ficou no card arquivado (o que fica já tinha). */
+  conflitos?: ConflitoDeVinculo[];
+}
+
+/** Linhas de texto da lista de conflitos (simulação e resultado). */
+export function textoDosConflitos(c: ConflitoDeVinculo[]): string[] {
+  if (!c.length) return ['Nenhum: tudo passa pro card que fica.'];
+  return c.map((x) => `- ${x.nome}: ${x.oque}${x.detalhe ? ` ${x.detalhe}` : ''} continua no card arquivado ${x.sai}`
+    + ` (o card que fica, ${x.fica}, já tem um)`);
 }
 
 export class ErroDaConsolidacao extends Error {}
@@ -127,6 +175,8 @@ export async function executarConsolidacao(
   }
 
   // 3c) juntar: campos vazios do que fica + vínculos; o que sai é arquivado
+  const pares = plano.acoes.juntar.map((j) => ({ sai: j.sai, fica: j.fica }));
+  const conflitosPrevistos = await conflitosDeVinculo(db, pares, 'antes');
   const colunas = new Set((await q<{ column_name: string; data_type: string }>(
     `SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'lead_rows'`)).map((c) => c.column_name));
   const ficas = new Set<string>();
@@ -142,12 +192,12 @@ export async function executarConsolidacao(
       const sql = r.unico
         ? `UPDATE ${r.tabela} t SET ${r.coluna} = $2 WHERE t.${r.coluna} = $1
              AND NOT EXISTS (SELECT 1 FROM ${r.tabela} x WHERE x.${r.coluna} = $2 AND x.${r.unico} = t.${r.unico})`
-        : `UPDATE ${r.tabela} SET ${r.coluna} = $2 WHERE ${r.coluna} = $1`;
+        : r.soUm
+          ? `UPDATE ${r.tabela} SET ${r.coluna} = $2 WHERE ${r.coluna} = $1
+               AND NOT EXISTS (SELECT 1 FROM ${r.tabela} x WHERE x.${r.coluna} = $2)`
+          : `UPDATE ${r.tabela} SET ${r.coluna} = $2 WHERE ${r.coluna} = $1`;
       await q(sql, [j.sai, j.fica]);
     }
-    // Venda: só uma por card — a do que sai só passa se o que fica não tem.
-    await q(`UPDATE lead_rows SET venda_origem_id = $2 WHERE venda_origem_id = $1
-             AND NOT EXISTS (SELECT 1 FROM lead_rows x WHERE x.venda_origem_id = $2)`, [j.sai, j.fica]);
     await q(`UPDATE lead_rows SET deleted_at = $2, delete_reason = $3 WHERE id = $1 AND deleted_at IS NULL`,
       [j.sai, agora, `${MOTIVO} ${j.fica}`]);
     ficas.add(j.fica);
@@ -167,10 +217,12 @@ export async function executarConsolidacao(
     await q('UPDATE lead_rows SET entrou_coluna_em = $2 WHERE id = $1', [m.id, antes.get(m.id)?.entrou_coluna_em ?? null]);
   }
 
-  // 3e) Responsável = Luis em todos os leads do CRM novo (única mudança de campo)
+  // 3e) Responsável = Luis em todos os leads do CRM novo (única mudança de campo). Só o funil: as linhas dos quadros de
+  // Vendas e de Contrato (que podem estar na mesma aba) não são leads e não mudam — igual à conta do relatório.
   const [{ n: responsaveis }] = await q<{ n: number }>(
     `WITH u AS (UPDATE lead_rows r SET responsavel = 'Luis' FROM lead_boards lb
-       WHERE lb.id = r.board_id AND lb.page = $1 AND r.deleted_at IS NULL AND r.responsavel IS DISTINCT FROM 'Luis' RETURNING 1)
+       WHERE lb.id = r.board_id AND lb.page = $1 AND NOT lb.is_vendas AND NOT lb.is_contrato
+         AND r.deleted_at IS NULL AND r.responsavel IS DISTINCT FROM 'Luis' RETURNING 1)
      SELECT count(*)::int AS n FROM u`, [PAGINA_DESTINO]);
 
   // 4) conferência
@@ -201,6 +253,17 @@ export async function executarConsolidacao(
      JOIN lead_rows o ON o.id = c.espelho_origem_id JOIN lead_boards ob ON ob.id = o.board_id
      WHERE c.deleted_at IS NULL AND o.deleted_at IS NULL AND cb.page = $1 AND ob.page = $1`, [PAGINA_DESTINO]);
   confere('Nenhuma cópia do closer junto da origem no CRM novo', copiasDuplicadas === 0, `${copiasDuplicadas}`);
+  // Vínculos: o que não é "um só por card" tem que ter saído TODO do card arquivado.
+  let soltos = 0;
+  for (const r of RELIGAR.filter((x) => !x.conflito)) {
+    const [{ n }] = await q<{ n: number }>(`SELECT count(*)::int AS n FROM ${r.tabela} WHERE ${r.coluna} = ANY($1::uuid[])`,
+      [pares.map((p) => p.sai)]);
+    soltos += n;
+  }
+  confere('Histórico, tarefas, contratos e fichas religados ao card que fica', soltos === 0, `${soltos} ainda no card arquivado`);
+  const conflitos = await conflitosDeVinculo(db, pares, 'depois');
+  confere('Conflitos de reunião/venda iguais aos previstos', conflitos.length === conflitosPrevistos.length,
+    `${conflitos.length} (previsto ${conflitosPrevistos.length})`);
   const protegidasDepois = await q<{ n: number; h: string | null }>(
     `SELECT count(*)::int AS n, md5(string_agg(r::text, '|' ORDER BY r.id)) AS h
      FROM lead_rows r JOIN lead_boards lb ON lb.id = r.board_id WHERE lb.page = ANY($1)`, [PAGINAS_PROTEGIDAS]);
@@ -228,7 +291,7 @@ export async function executarConsolidacao(
       movidos: plano.acoes.mover.length, juntados: plano.acoes.juntar.length, etiquetasCriadas: plano.acoes.etiquetas.length,
       responsavelLuis: responsaveis, totalNoDestino,
     },
-    regua, conferencias,
+    regua, conferencias, conflitos,
   };
   const falhas = conferencias.filter((c) => !c.ok);
   if (falhas.length) {
@@ -248,6 +311,8 @@ export function textoDoResultado(r: ResultadoDaExecucao): string {
     `Responsável = Luis em ${r.contagens.responsavelLuis} lead(s) · Total no CRM novo: ${r.contagens.totalNoDestino}`,
     '', '## Conferência',
     ...r.conferencias.map((c) => `- ${c.ok ? 'OK' : 'FALHOU'} — ${c.item}: ${c.detalhe}`),
+    '', `## Conflito de reunião/venda (${r.conflitos?.length ?? 0}) — ficou ligado ao card arquivado`,
+    ...textoDosConflitos(r.conflitos ?? []),
     '', '## Régua: cards com entrou_coluna_em/regua_* alterados',
     `Disparo em massa ${r.regua.disparo} · Follow up ${r.regua.followup} · Reunião não comparecida ${r.regua.naoCompareceu}`,
     '', '## Backup (no mesmo banco)',
